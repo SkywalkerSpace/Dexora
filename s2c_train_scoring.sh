@@ -21,8 +21,8 @@ set -Eeuo pipefail
 : "${SPRE_FILE:=runs/spre/complete_analysis_results.json}"
 : "${SHIGH_FILE:=runs/shigh.json}"
 
-: "${NUM_GPUS:=8}"
-: "${TRAIN_BATCH_SIZE:=16}s"
+: "${NUM_GPUS:=1}"
+: "${TRAIN_BATCH_SIZE:=1}s"
 : "${GRAD_ACCUM:=2}"
 : "${MAX_TRAIN_STEPS:=10000}"
 : "${CHECKPOINTING_PERIOD:=2000}"
@@ -45,7 +45,7 @@ echo "    LOGPI_FILE           : $LOGPI_FILE"
 echo "    SPRE / SHIGH         : $SPRE_FILE / $SHIGH_FILE"
 echo "    OUTPUT_DIR           : $OUTPUT_DIR"
 
-accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
+accelerate launch --num_processes="$NUM_GPUS" \
     --mixed_precision="$MIXED_PRECISION" \
     -m train.main_scoring \
     --config_path="$CONFIG_PATH" \

@@ -23,8 +23,8 @@ set -Eeuo pipefail
 : "${SCORING_CKPT:=checkpoints/dexora-scoring/final_model/pytorch_model.bin}"
 : "${OUTPUT_DIR:=checkpoints/dexora-400m-posttrain}"
 
-: "${NUM_GPUS:=8}"
-: "${TRAIN_BATCH_SIZE:=4}"
+: "${NUM_GPUS:=1}"
+: "${TRAIN_BATCH_SIZE:=1}"
 : "${GRAD_ACCUM:=1}"
 : "${MAX_TRAIN_STEPS:=50000}"
 : "${CHECKPOINTING_PERIOD:=5000}"
@@ -59,7 +59,7 @@ echo "    OUTPUT_DIR           : $OUTPUT_DIR"
 echo "    DWBC eta / w_max     : $DWBC_ETA / $DWBC_W_MAX"
 echo "    real_data_fraction   : $REAL_DATA_FRACTION"
 
-accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
+accelerate launch --num_processes="$NUM_GPUS" \
     --mixed_precision="$MIXED_PRECISION" \
     -m train.main_posttrain \
     --config_path="$CONFIG_PATH" \
