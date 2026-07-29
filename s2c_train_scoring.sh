@@ -22,7 +22,7 @@ set -Eeuo pipefail
 : "${SHIGH_FILE:=runs/shigh.json}"
 
 : "${NUM_GPUS:=8}"
-: "${TRAIN_BATCH_SIZE:=16}"
+: "${TRAIN_BATCH_SIZE:=16}s"
 : "${GRAD_ACCUM:=2}"
 : "${MAX_TRAIN_STEPS:=10000}"
 : "${CHECKPOINTING_PERIOD:=2000}"
