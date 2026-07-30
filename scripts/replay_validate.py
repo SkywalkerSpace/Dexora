@@ -191,6 +191,8 @@ def main():
                         help="Python module that exposes replay(...) for --verifier mujoco.")
     parser.add_argument("--limit", type=int, default=-1,
                         help="Process at most this many Spre episodes (-1 = all).")
+    parser.add_argument("--visualize", action="store_true",
+                        help="Keep the MuJoCo viewer open after replay (twin-dependent).")
     args = parser.parse_args()
 
     with open(args.pre_screening_file, "r") as f:
@@ -249,6 +251,12 @@ def main():
     with open(args.output_file, "w") as f:
         json.dump(output, f, indent=2, default=float)
     print(f"Saved Shigh to {args.output_file}")
+
+    if args.visualize and args.verifier == "mujoco" and args.twin_module:
+        twin_mod = __import__(args.twin_module, fromlist=["wait_for_viewers"])
+        wait = getattr(twin_mod, "wait_for_viewers", None)
+        if callable(wait):
+            wait()
 
 
 if __name__ == "__main__":

@@ -26,14 +26,22 @@ set -Eeuo pipefail
 : "${AIRBOT_MUJOCO_GUI:=0}"           # 0=headless, 1=open MuJoCo viewer
 
 extra_args=()
+visualize_args=()
 if [[ -n "$REPLAY_TWIN_MODULE" ]]; then
     extra_args+=(--twin_module "$REPLAY_TWIN_MODULE")
 fi
 
 if [[ "$REPLAY_VERIFIER" == "mujoco" && -z "$REPLAY_TWIN_MODULE" ]]; then
-    export AIRBOT_MUJOCO_TASK_MODULE AIRBOT_MUJOCO_XML AIRBOT_MUJOCO_GUI
     REPLAY_TWIN_MODULE=scripts.airbot_mujoco_twin
     extra_args+=(--twin_module "$REPLAY_TWIN_MODULE")
+fi
+
+if [[ "$REPLAY_VERIFIER" == "mujoco" ]]; then
+    export AIRBOT_MUJOCO_TASK_MODULE AIRBOT_MUJOCO_XML AIRBOT_MUJOCO_GUI
+fi
+
+if [[ "$AIRBOT_MUJOCO_GUI" == "1" || "$AIRBOT_MUJOCO_GUI" == "true" || "$AIRBOT_MUJOCO_GUI" == "yes" ]]; then
+    visualize_args+=(--visualize)
 fi
 
 mkdir -p "$(dirname "$SHIGH_FILE")"
@@ -43,6 +51,7 @@ python scripts/replay_validate.py \
     --lerobot_root="$DEXORA_LEROBOT_ROOT" \
     --output_file="$SHIGH_FILE" \
     --verifier="$REPLAY_VERIFIER" \
+    "${visualize_args[@]}" \
     "${extra_args[@]}"
 
 echo "==> Shigh written to $SHIGH_FILE"

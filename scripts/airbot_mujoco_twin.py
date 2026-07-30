@@ -29,6 +29,8 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
+_VIEWERS = []
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(int(default))).lower() in {"1", "true", "yes", "on"}
@@ -67,6 +69,7 @@ class _XmlTwin:
             try:
                 import mujoco.viewer  # type: ignore
                 self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+                _VIEWERS.append(self.viewer)
             except Exception as exc:
                 raise RuntimeError(
                     "MuJoCo GUI could not start; run with AIRBOT_MUJOCO_GUI=0 on headless machines"
@@ -173,6 +176,15 @@ def _make_twin() -> Any:
     raise RuntimeError(
         "Set AIRBOT_MUJOCO_TASK_MODULE (Discoverse task) or AIRBOT_MUJOCO_XML (MuJoCo XML)"
     )
+
+
+def wait_for_viewers() -> None:
+    """Keep GUI replay windows alive until the user closes them."""
+    if not _VIEWERS:
+        return
+    print("MuJoCo viewer is open; close the viewer window(s) to exit.")
+    while any(viewer.is_running() for viewer in _VIEWERS):
+        time.sleep(0.1)
 
 
 def replay(states: np.ndarray, actions: np.ndarray, task_id: int) -> Dict[str, object]:
