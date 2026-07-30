@@ -30,6 +30,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 _VIEWERS = []
+_ACTIVE_TWIN = None
+_ACTIVE_CONFIG = None
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -197,7 +199,15 @@ def replay(states: np.ndarray, actions: np.ndarray, task_id: int) -> Dict[str, o
     if not np.isfinite(actions).all():
         return _Result(False, False, 0, failure_reason="actions contain NaN/Inf").as_dict()
 
-    twin = _make_twin()
+    # Keep one simulator/viewer for the whole validation run. Creating a new
+    # GLFW window for every episode can lose the window on macOS and produces
+    # one viewer per episode instead of one interactive replay window.
+    global _ACTIVE_TWIN, _ACTIVE_CONFIG
+    config = (os.getenv("AIRBOT_MUJOCO_TASK_MODULE", ""), os.getenv("AIRBOT_MUJOCO_XML", ""), _env_flag("AIRBOT_MUJOCO_GUI", False))
+    if _ACTIVE_TWIN is None or _ACTIVE_CONFIG != config:
+        _ACTIVE_TWIN = _make_twin()
+        _ACTIVE_CONFIG = config
+    twin = _ACTIVE_TWIN
     twin.reset(states)
     for i, action in enumerate(actions):
         try:

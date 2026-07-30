@@ -16,6 +16,11 @@
 # ============================================================================
 set -Eeuo pipefail
 
+# Resolve paths from this script, so the command also works when invoked as
+# ``bash /path/to/Dexora/s2b_replay.sh`` from the repository's parent dir.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 : "${DEXORA_LEROBOT_ROOT:=data/Dexora_Real-World_Dataset/airbot_pick_and_place}"
 : "${SPRE_DIR:=runs/spre}"
 : "${SHIGH_FILE:=runs/shigh.json}"
@@ -44,6 +49,16 @@ if [[ "$AIRBOT_MUJOCO_GUI" == "1" || "$AIRBOT_MUJOCO_GUI" == "true" || "$AIRBOT_
     visualize_args+=(--visualize)
 fi
 
+# Use the regular Python interpreter for the MuJoCo viewer.
+GUI_VALUE="$(printf '%s' "$AIRBOT_MUJOCO_GUI" | tr '[:upper:]' '[:lower:]')"
+if [[ "$GUI_VALUE" =~ ^(1|true|yes|on)$ ]]; then
+    # A GUI viewer cannot be created with EGL/OSMesa. This is especially easy
+    # to hit on Ubuntu systems that export MUJOCO_GL=egl for training jobs.
+    export MUJOCO_GL=glfw
+    if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+        echo "WARNING: MuJoCo GUI requested, but DISPLAY/WAYLAND_DISPLAY is not set; no desktop window can be shown." >&2
+    fi
+fi
 mkdir -p "$(dirname "$SHIGH_FILE")"
 echo "==> Stage-2b replay verification (verifier=$REPLAY_VERIFIER)"
 python scripts/replay_validate.py \
