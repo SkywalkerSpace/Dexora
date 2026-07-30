@@ -209,6 +209,14 @@ def main():
 
     verifier = VERIFIER_REGISTRY[args.verifier](args)
 
+    # Start the viewer before loading/replaying episodes. This makes GUI mode
+    # useful even when all episodes fail dataset/action validation.
+    if args.visualize and args.twin_module:
+        twin_mod = __import__(args.twin_module, fromlist=["ensure_viewer"])
+        ensure_viewer = getattr(twin_mod, "ensure_viewer", None)
+        if callable(ensure_viewer):
+            ensure_viewer()
+
     dataset = None
     if args.verifier in {"energy", "mujoco"}:
         if LeRobotDataset is None:

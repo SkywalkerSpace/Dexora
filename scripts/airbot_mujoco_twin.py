@@ -180,6 +180,17 @@ def _make_twin() -> Any:
     )
 
 
+def ensure_viewer() -> None:
+    """Initialize the configured MuJoCo viewer before episode replay."""
+    global _ACTIVE_TWIN, _ACTIVE_CONFIG
+    if not _env_flag("AIRBOT_MUJOCO_GUI", False):
+        return
+    config = (os.getenv("AIRBOT_MUJOCO_TASK_MODULE", ""), os.getenv("AIRBOT_MUJOCO_XML", ""), True)
+    if _ACTIVE_TWIN is None or _ACTIVE_CONFIG != config:
+        _ACTIVE_TWIN = _make_twin()
+        _ACTIVE_CONFIG = config
+
+
 def wait_for_viewers() -> None:
     """Keep GUI replay windows alive until the user closes them."""
     if not _VIEWERS:
