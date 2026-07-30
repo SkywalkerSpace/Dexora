@@ -23,6 +23,7 @@ set -Eeuo pipefail
 : "${REPLAY_TWIN_MODULE:=}"          # only used when REPLAY_VERIFIER=mujoco
 : "${AIRBOT_MUJOCO_TASK_MODULE:=}"   # Discoverse task module: SimNode + cfg
 : "${AIRBOT_MUJOCO_XML:=}"            # fallback plain MuJoCo XML
+: "${AIRBOT_MUJOCO_GUI:=0}"           # 0=headless, 1=open MuJoCo viewer
 
 extra_args=()
 if [[ -n "$REPLAY_TWIN_MODULE" ]]; then
@@ -30,7 +31,7 @@ if [[ -n "$REPLAY_TWIN_MODULE" ]]; then
 fi
 
 if [[ "$REPLAY_VERIFIER" == "mujoco" && -z "$REPLAY_TWIN_MODULE" ]]; then
-    export AIRBOT_MUJOCO_TASK_MODULE AIRBOT_MUJOCO_XML
+    export AIRBOT_MUJOCO_TASK_MODULE AIRBOT_MUJOCO_XML AIRBOT_MUJOCO_GUI
     REPLAY_TWIN_MODULE=scripts.airbot_mujoco_twin
     extra_args+=(--twin_module "$REPLAY_TWIN_MODULE")
 fi

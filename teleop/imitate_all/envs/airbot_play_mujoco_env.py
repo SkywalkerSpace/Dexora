@@ -2,6 +2,7 @@ import time
 import collections
 import dm_env
 import importlib
+import os
 from discoverse.envs.airbot_play_base import AirbotPlayCfg
 from discoverse.task_base import AirbotPlayTaskBase
 
@@ -16,7 +17,11 @@ class MujocoEnv(object):
         module = importlib.import_module(path.replace("/", ".").replace(".py", ""))
         node_cls = getattr(module, "SimNode")
         cfg: AirbotPlayCfg = getattr(module, "cfg")
-        cfg.headless = False
+        # Batch replay is headless by default. Set AIRBOT_MUJOCO_GUI=1 to
+        # open the Discoverse viewer.
+        cfg.headless = os.getenv("AIRBOT_MUJOCO_GUI", "0").lower() not in {
+            "1", "true", "yes", "on"
+        }
         self.exec_node: AirbotPlayTaskBase = node_cls(cfg)
         # self.exec_node.cam_id = self.exec_node.config.obs_camera_id
         self.reset_position = None
