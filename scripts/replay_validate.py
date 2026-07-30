@@ -192,8 +192,13 @@ def main():
     parser.add_argument("--limit", type=int, default=-1,
                         help="Process at most this many Spre episodes (-1 = all).")
     parser.add_argument("--visualize", action="store_true",
-                        help="Keep the MuJoCo viewer open after replay (twin-dependent).")
+                        help="Start the MuJoCo viewer and keep it open after replay.")
     args = parser.parse_args()
+
+    if args.visualize:
+        if args.verifier != "mujoco":
+            parser.error("--visualize requires --verifier mujoco")
+        os.environ["AIRBOT_MUJOCO_GUI"] = "1"
 
     with open(args.pre_screening_file, "r") as f:
         screening = json.load(f)
