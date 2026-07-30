@@ -71,6 +71,17 @@ class _XmlTwin:
             try:
                 import mujoco.viewer  # type: ignore
                 self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+                # ``launch_passive`` starts in MuJoCo's free camera.  That
+                # camera is not guaranteed to frame a small robot/table scene
+                # and can make the robot look like it is missing.  Select the
+                # camera explicitly defined by the task XML and frame it
+                # before the first sync.
+                camera_id = self.mujoco.mj_name2id(
+                    self.model, self.mujoco.mjtObj.mjOBJ_CAMERA, "overview"
+                )
+                if camera_id >= 0:
+                    self.viewer.cam.type = self.mujoco.mjtCamera.mjCAMERA_FIXED
+                    self.viewer.cam.fixedcamid = camera_id
                 _VIEWERS.append(self.viewer)
             except Exception as exc:
                 raise RuntimeError(
