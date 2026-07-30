@@ -21,9 +21,17 @@ set -Eeuo pipefail
 : "${SHIGH_FILE:=runs/shigh.json}"
 : "${REPLAY_VERIFIER:=trust_spre}"   # trust_spre | energy | mujoco
 : "${REPLAY_TWIN_MODULE:=}"          # only used when REPLAY_VERIFIER=mujoco
+: "${AIRBOT_MUJOCO_TASK_MODULE:=}"   # Discoverse task module: SimNode + cfg
+: "${AIRBOT_MUJOCO_XML:=}"            # fallback plain MuJoCo XML
 
 extra_args=()
 if [[ -n "$REPLAY_TWIN_MODULE" ]]; then
+    extra_args+=(--twin_module "$REPLAY_TWIN_MODULE")
+fi
+
+if [[ "$REPLAY_VERIFIER" == "mujoco" && -z "$REPLAY_TWIN_MODULE" ]]; then
+    export AIRBOT_MUJOCO_TASK_MODULE AIRBOT_MUJOCO_XML
+    REPLAY_TWIN_MODULE=scripts.airbot_mujoco_twin
     extra_args+=(--twin_module "$REPLAY_TWIN_MODULE")
 fi
 

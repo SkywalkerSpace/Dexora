@@ -1,0 +1,80 @@
+<mujoco model="airbot_click_pen_once">
+  <compiler angle="radian" autolimits="true" inertiafromgeom="true"/>
+  <option timestep="0.002" integrator="implicitfast" gravity="0 0 -9.81"/>
+  <size njmax="2000" nconmax="400"/>
+
+  <visual>
+    <headlight diffuse="0.8 0.8 0.8" ambient="0.3 0.3 0.3"/>
+    <map znear="0.01" zfar="20"/>
+  </visual>
+
+  <default>
+    <joint damping="2" armature="0.02" limited="true"/>
+    <geom friction="0.8 0.1 0.1" solref="0.01 1" solimp="0.9 0.95 0.001"/>
+    <motor ctrlrange="-3.14 3.14"/>
+  </default>
+
+  <asset>
+    <material name="floor_mat" rgba="0.18 0.20 0.23 1"/>
+    <material name="airbot_blue" rgba="0.08 0.25 0.55 1"/>
+    <material name="joint_dark" rgba="0.04 0.05 0.07 1"/>
+    <material name="pen_mat" rgba="0.92 0.92 0.95 1"/>
+    <material name="button_mat" rgba="0.9 0.12 0.08 1"/>
+    <texture name="sky" type="skybox" builtin="gradient" rgb1="0.12 0.16 0.25" rgb2="0.75 0.80 0.90" width="256" height="256"/>
+  </asset>
+
+  <worldbody>
+    <light name="key" pos="1 -2 2.5" dir="-0.3 0.4 -1" diffuse="1 1 1"/>
+    <camera name="overview" pos="2.0 -2.4 1.6" xyaxes="1 0 0 0 0.55 0.84"/>
+    <geom name="floor" type="plane" size="4 4 0.05" material="floor_mat"/>
+
+    <body name="airbot_base" pos="0 0 0.12">
+      <geom name="base" type="cylinder" size="0.18 0.12" material="joint_dark"/>
+      <body name="link1" pos="0 0 0.12">
+        <joint name="joint1" axis="0 0 1" range="-3.14 3.14"/>
+        <geom name="link1_geom" type="capsule" fromto="0 0 0 0 0 0.28" size="0.07" material="airbot_blue"/>
+        <body name="link2" pos="0 0 0.28">
+          <joint name="joint2" axis="0 1 0" range="-1.6 1.6"/>
+          <geom name="link2_geom" type="capsule" fromto="0 0 0 0 0 0.42" size="0.055" material="airbot_blue"/>
+          <body name="link3" pos="0 0 0.42">
+            <joint name="joint3" axis="0 1 0" range="-2.6 2.6"/>
+            <geom name="link3_geom" type="capsule" fromto="0 0 0 0 0 0.38" size="0.05" material="airbot_blue"/>
+            <body name="link4" pos="0 0 0.38">
+              <joint name="joint4" axis="0 0 1" range="-3.14 3.14"/>
+              <geom name="link4_geom" type="capsule" fromto="0 0 0 0 0 0.22" size="0.045" material="joint_dark"/>
+              <body name="link5" pos="0 0 0.22">
+                <joint name="joint5" axis="0 1 0" range="-2.4 2.4"/>
+                <geom name="link5_geom" type="capsule" fromto="0 0 0 0 0 0.18" size="0.04" material="airbot_blue"/>
+                <body name="link6" pos="0 0 0.18">
+                  <joint name="joint6" axis="0 0 1" range="-3.14 3.14"/>
+                  <geom name="wrist" type="sphere" size="0.065" material="joint_dark"/>
+                  <body name="pen" pos="0 0 0.13">
+                    <geom name="pen_body" type="capsule" fromto="0 0 -0.08 0 0 0.16" size="0.018" material="pen_mat"/>
+                    <geom name="pen_tip" type="sphere" pos="0 0 -0.10" size="0.028" material="pen_mat"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <body name="button_station" pos="0.65 0 0.04">
+      <geom name="station" type="box" pos="0 0 -0.04" size="0.25 0.25 0.04" material="joint_dark"/>
+      <body name="button_body" pos="0 0 0.08">
+        <joint name="button_slide" type="slide" axis="0 0 -1" range="0 0.035" damping="1"/>
+        <geom name="button" type="cylinder" axis="0 0 1" size="0.09 0.025" material="button_mat"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <position name="act_joint1" joint="joint1" kp="80" ctrlrange="-3.14 3.14"/>
+    <position name="act_joint2" joint="joint2" kp="80" ctrlrange="-1.6 1.6"/>
+    <position name="act_joint3" joint="joint3" kp="80" ctrlrange="-2.6 2.6"/>
+    <position name="act_joint4" joint="joint4" kp="50" ctrlrange="-3.14 3.14"/>
+    <position name="act_joint5" joint="joint5" kp="50" ctrlrange="-2.4 2.4"/>
+    <position name="act_joint6" joint="joint6" kp="40" ctrlrange="-3.14 3.14"/>
+  </actuator>
+</mujoco>
