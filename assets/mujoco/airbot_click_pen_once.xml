@@ -64,7 +64,7 @@
       <geom name="station" type="box" pos="0 0 -0.04" size="0.25 0.25 0.04" material="joint_dark"/>
       <body name="button_body" pos="0 0 0.08">
         <joint name="button_slide" type="slide" axis="0 0 -1" range="0 0.035" damping="1"/>
-        <geom name="button" type="cylinder" axis="0 0 1" size="0.09 0.025" material="button_mat"/>
+        <geom name="button" type="cylinder" size="0.09 0.025" material="button_mat"/>
       </body>
     </body>
   </worldbody>

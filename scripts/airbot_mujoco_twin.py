@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -61,6 +62,15 @@ class _XmlTwin:
         )
         self.button_min = 0.012
         self.button_pressed = False
+        self.viewer = None
+        if _env_flag("AIRBOT_MUJOCO_GUI", False):
+            try:
+                import mujoco.viewer  # type: ignore
+                self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+            except Exception as exc:
+                raise RuntimeError(
+                    "MuJoCo GUI could not start; run with AIRBOT_MUJOCO_GUI=0 on headless machines"
+                ) from exc
         if self.control_dim == 0:
             raise ValueError("MuJoCo XML has no actuators or joint coordinates")
 
@@ -76,6 +86,9 @@ class _XmlTwin:
         n = min(self.control_dim, action.size)
         self.data.ctrl[:n] = np.asarray(action[:n], dtype=float)
         self.mujoco.mj_step(self.model, self.data)
+        if self.viewer is not None:
+            self.viewer.sync()
+            time.sleep(max(0.0, float(self.model.opt.timestep)))
         return bool(np.isfinite(self.data.qpos).all() and np.isfinite(self.data.qvel).all())
 
     def collision_free(self) -> bool:
@@ -195,12 +208,31 @@ def replay(states: np.ndarray, actions: np.ndarray, task_id: int) -> Dict[str, o
     ).as_dict()
 
 
+def _run_gui(xml_path: str, steps: int) -> None:
+    """Play a stationary/zero-action XML scene and keep the window open."""
+    os.environ["AIRBOT_MUJOCO_XML"] = xml_path
+    os.environ["AIRBOT_MUJOCO_GUI"] = "1"
+    twin = _XmlTwin(xml_path)
+    actions = np.zeros((steps, 6), dtype=float)
+    twin.reset(np.zeros((1, 1)))
+    for action in actions:
+        twin.step(action)
+    print({"success": twin.success(), "collision_free": twin.collision_free(), "steps": steps})
+    print("MuJoCo viewer is open; close the window to exit.")
+    while twin.viewer is not None and twin.viewer.is_running():
+        time.sleep(0.1)
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Smoke-test an Airbot MuJoCo XML")
     parser.add_argument("--xml", required=True)
     parser.add_argument("--steps", type=int, default=20)
+    parser.add_argument("--gui", action="store_true", help="open the interactive MuJoCo viewer")
     args = parser.parse_args()
-    os.environ["AIRBOT_MUJOCO_XML"] = args.xml
-    print(replay(np.zeros((1, 1)), np.zeros((args.steps, 1)), 0))
+    if args.gui:
+        _run_gui(args.xml, args.steps)
+    else:
+        os.environ["AIRBOT_MUJOCO_XML"] = args.xml
+        print(replay(np.zeros((1, 1)), np.zeros((args.steps, 6)), 0))
