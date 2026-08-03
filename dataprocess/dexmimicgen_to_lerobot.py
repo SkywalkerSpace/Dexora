@@ -3,7 +3,7 @@
 """
 python dexmimicgen_to_lerobot.py --inspect /path/to/TwoArmPouring.hdf5
 
-python dexmimicgen_to_lerobot.py --hdf5_dir /path/to/hdf5_files --repo_id dexora_v1 --output_root ../lerobot_data --overwrite
+python dexmimicgen_to_lerobot.py --hdf5_files /path/to/hdf5_files --repo_id dexora_v1 --output_root ../lerobot_data --overwrite
 
 dexmimicgen (robomimic HDF5) -> LeRobot v2.1 转换脚本
 用于 Dexora 双臂灵巧手 VLA 数据管线（对应步骤1）
@@ -117,7 +117,7 @@ TASK_INSTRUCTIONS = {
         "Place the capsule inside the machine and close it.",
         "Prepare the coffee machine by inserting the pod and closing the lid.",
     ],
-    "Two_Arm_Can_Sort_Blue": [
+    "Two_Arm_Can_Sort_Random": [
         "Sort the blue can into the correct bin using both arms.",
         "Pick up the blue can and place it in the designated bin.",
         "Use both hands to move the blue can to its sorting bin.",
@@ -126,7 +126,7 @@ TASK_INSTRUCTIONS = {
     ],
 }
 
-DEFAULT_FPS = 20  # 跟 dexmimicgen 采集/回放帧率一致，用 --inspect 确认 env_args 里的 control_freq
+DEFAULT_FPS = 20  # 跟 dexmimicgen 采集/回放帧率一致
 
 
 # ============================================================
