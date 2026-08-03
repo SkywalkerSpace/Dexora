@@ -105,6 +105,17 @@ class LeRobotVLADataset:
         metadata = LeRobotDatasetMetadata("", repo_dir)
         fps = metadata.fps
 
+        # dexmimicgen 转出来的数据集可能没有 top（cam_high）这路，
+        # 用 metadata.features 判断这个 repo 实际注册了哪些相机，缺的记下来用于后面补0
+        self.available_camera_keys = [
+            (cam, out_key) for cam, out_key in self.camera_keys
+            if f"observation.images.{cam}" in metadata.features
+        ]
+        self.missing_camera_keys = [
+            (cam, out_key) for cam, out_key in self.camera_keys
+            if f"observation.images.{cam}" not in metadata.features
+        ]
+
         # LeRobot v2.1 column names: ``observation.state`` / ``action`` (singular).
         # ``delta_timestamps`` keys must match the underlying dataset columns,
         # otherwise hf_datasets raises KeyError: "Column states not in the dataset"
@@ -114,7 +125,7 @@ class LeRobotVLADataset:
             'action': [i / fps for i in range(self.CHUNK_SIZE)],
         }
         if load_imgs:
-            for cam, _ in self.camera_keys:
+            for cam, _ in self.available_camera_keys:
                 delta_timestamps[f"observation.images.{cam}"] = [
                     i / fps for i in range(1 - self.IMG_HISTORY_SIZE, 1)
                 ]
@@ -234,7 +245,7 @@ class LeRobotVLADataset:
             sample["state"] = self._normalize_data(sample["state"], 'state')
             sample["actions"] = self._normalize_data(sample["actions"], 'action')
         
-        for key, out_key in self.camera_keys:
+        for key, out_key in self.available_camera_keys:
             image = item[f"observation.images.{key}"]
             # image may be [C,H,W] or [N,C,H,W] (when delta_timestamps used)
             if image.ndim == 3:
@@ -256,7 +267,12 @@ class LeRobotVLADataset:
                 img_np = img_np[-self.IMG_HISTORY_SIZE:]
             sample[out_key] = img_np
             sample[out_key + '_mask'] = np.ones(self.IMG_HISTORY_SIZE, dtype=bool)
-        
+
+        for _, out_key in self.missing_camera_keys:
+            ref_img = sample[self.available_camera_keys[0][1]]  # 借一个已有相机的shape，内容不重要
+            sample[out_key] = np.zeros_like(ref_img)
+            sample[out_key + '_mask'] = np.zeros(self.IMG_HISTORY_SIZE, dtype=bool)
+
         return sample
     
     def _get_state_only_item(self, index: int = None):
