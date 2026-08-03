@@ -59,7 +59,7 @@ class DexoraPolicyConfig:
     """
 
     model_config_path: str = "configs/base_400m.yaml"
-    text_encoder_path: str = "google/t5-v1_1-xxl"
+    text_encoder_path: str = "google/t5-v1_1-small"
     vision_encoder_path: str = "google/siglip-so400m-patch14-384"
 
     state_dim: int = 36
