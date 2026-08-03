@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+python dexmimicgen_to_lerobot.py --inspect /path/to/TwoArmPouring.hdf5
+
+python dexmimicgen_to_lerobot.py --hdf5_dir /path/to/hdf5_files --repo_id dexora_v1 --output_root ../lerobot_data --overwrite
+
 dexmimicgen (robomimic HDF5) -> LeRobot v2.1 转换脚本
 用于 Dexora 双臂灵巧手 VLA 数据管线（对应步骤1）
 
@@ -99,21 +103,21 @@ IMAGE_SIZE = (256, 256)  # (H, W)，按实际渲染分辨率改，不必强行�
 
 # --- 5. 每个任务的 5 条语言指令 phrasing，key 用任务名（需能从 hdf5 文件名里匹配到）---
 TASK_INSTRUCTIONS = {
-    "TwoArmPouring": [
+    "Two_Arm_Pouring": [
         "Pour the contents from the cup into the bowl using both hands.",
         "Use both arms to pour from the cup into the bowl.",
         "Pick up the cup and pour it into the bowl.",
         "Carefully pour the liquid from the cup into the bowl with both hands.",
         "Grasp the cup and empty it into the bowl.",
     ],
-    "TwoArmCoffee": [
+    "Two_Arm_Coffee": [
         "Make coffee by placing the pod and closing the machine lid.",
         "Insert the coffee pod and close the lid to start brewing.",
         "Use both hands to load the pod and shut the coffee machine.",
         "Place the capsule inside the machine and close it.",
         "Prepare the coffee machine by inserting the pod and closing the lid.",
     ],
-    "TwoArmCanSortBlue": [
+    "Two_Arm_Can_Sort_Blue": [
         "Sort the blue can into the correct bin using both arms.",
         "Pick up the blue can and place it in the designated bin.",
         "Use both hands to move the blue can to its sorting bin.",
@@ -136,8 +140,8 @@ def inspect_hdf5(path: str, n_demo_preview: int = 1):
         if "data" in f and "env_args" in f["data"].attrs:
             env_args = json.loads(f["data"].attrs["env_args"])
             print("env_args.env_name:", env_args.get("env_name"))
+            print("env_args.env_kwargs:", env_args.get("env_kwargs", {}))
             print("env_args.env_kwargs.robots:", env_args.get("env_kwargs", {}).get("robots"))
-            print("env_args.env_kwargs.control_freq:", env_args.get("env_kwargs", {}).get("control_freq"))
             cc = env_args.get("env_kwargs", {}).get("controller_configs")
             print("controller_configs:")
             print(json.dumps(cc, indent=2, ensure_ascii=False)[:3000])
