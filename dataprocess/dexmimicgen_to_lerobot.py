@@ -64,8 +64,8 @@ assert len(STATE_ACTION_NAMES) == 24
 # 不用动下面的转换逻辑。
 ACTION_LAYOUT = {
     "right_arm": slice(0, 6),
-    "left_arm": slice(6, 12),
-    "right_hand": slice(12, 18),
+    "right_hand": slice(6, 12),
+    "left_arm": slice(12, 18),
     "left_hand": slice(18, 24),
 }
 
@@ -90,10 +90,10 @@ HAND_INDICES = np.array([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5])
 # 目标名固定为 top / wrist_left / wrist_right / front。若某一路在环境里还没配置，
 # 先在 env 里加自定义相机位姿重新采数据，不要在转换脚本里用黑图占位（会给模型引入噪声先验）。
 CAMERA_KEY_MAP = {
-    "top": "agentview_image",
-    "wrist_left": "robot0_left_eye_in_hand_image",
-    "wrist_right": "robot0_right_eye_in_hand_image",
-    "front": "frontview_image",
+    # "top": 没有对应键，见下方说明
+    "wrist_left": "robot0_eye_in_left_hand_image",
+    "wrist_right": "robot0_eye_in_right_hand_image",
+    "front": "frontview_image",   # 这个不用改
 }
 IMAGE_SIZE = (256, 256)  # (H, W)，按实际渲染分辨率改，不必强行凑 480x640
 
@@ -137,6 +137,7 @@ def inspect_hdf5(path: str, n_demo_preview: int = 1):
             env_args = json.loads(f["data"].attrs["env_args"])
             print("env_args.env_name:", env_args.get("env_name"))
             print("env_args.env_kwargs.robots:", env_args.get("env_kwargs", {}).get("robots"))
+            print("env_args.env_kwargs.control_freq:", env_args.get("env_kwargs", {}).get("control_freq"))
             cc = env_args.get("env_kwargs", {}).get("controller_configs")
             print("controller_configs:")
             print(json.dumps(cc, indent=2, ensure_ascii=False)[:3000])
