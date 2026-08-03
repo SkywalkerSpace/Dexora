@@ -58,9 +58,9 @@ class DexoraPolicyConfig:
     Override anything you've tweaked at training time.
     """
 
-    model_config_path: str = "configs/base_400m.yaml"
-    text_encoder_path: str = "google/t5-v1_1-small"
-    vision_encoder_path: str = "google/siglip-so400m-patch14-384"
+    model_config_path: str = "/home/ubuntu/myh/expirement/Dexora/configs/base_400m.yaml"
+    text_encoder_path: str = "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-small"
+    vision_encoder_path: str = "/home/ubuntu/myh/expirement/Dexora/google/siglip-so400m-patch14-384"
 
     state_dim: int = 36
     chunk_size: int = 32
