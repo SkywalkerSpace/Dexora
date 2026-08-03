@@ -3,7 +3,14 @@ from transformers import AutoTokenizer, T5EncoderModel
 
 
 class T5Embedder:
-    available_models = ["google/t5-v1_1-small", "google/t5-v1_1-base", "google/t5-v1_1-large", "google/t5-v1_1-xl", "google/t5-v1_1-xxl"]
+    available_models = [
+        "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-small",
+        "google/t5-v1_1-small",
+        "google/t5-v1_1-base",
+        "google/t5-v1_1-large",
+        "google/t5-v1_1-xl",
+        "google/t5-v1_1-xxl",
+    ]
 
     def __init__(
         self,
