@@ -1,0 +1,165 @@
+python dexmimicgen_to_lerobot.py --inspect  '/home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5' 
+============================================================
+文件: /home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5
+env_args.env_name: TwoArmCanSortBlue
+env_args.env_kwargs.robots: ['GR1ArmsOnly']
+controller_configs:
+{
+  "type": "WHOLE_BODY_MINK_IK",
+  "composite_controller_specific_configs": {
+    "ref_name": [
+      "gripper0_right_grip_site",
+      "gripper0_left_grip_site"
+    ],
+    "interpolation": null,
+    "actuation_part_names": [
+      "right",
+      "left"
+    ],
+    "max_dq": 4,
+    "ik_pseudo_inverse_damping": 0.05,
+    "ik_integration_dt": 0.1,
+    "ik_input_type": "absolute",
+    "ik_input_ref_frame": "world",
+    "ik_input_rotation_repr": "axis_angle",
+    "verbose": false,
+    "ik_posture_weights": {
+      "robot0_l_shoulder_pitch": 4.0,
+      "robot0_r_shoulder_pitch": 4.0,
+      "robot0_l_shoulder_roll": 3.0,
+      "robot0_r_shoulder_roll": 3.0,
+      "robot0_l_shoulder_yaw": 2.0,
+      "robot0_r_shoulder_yaw": 2.0
+    },
+    "ik_hand_pos_cost": 1.0,
+    "ik_hand_ori_cost": 0.5,
+    "use_joint_angle_action_input": false
+  },
+  "body_parts": {
+    "right": {
+      "type": "JOINT_POSITION",
+      "input_max": 1,
+      "input_min": -1,
+      "input_type": "absolute",
+      "output_max": 0.5,
+      "output_min": -0.5,
+      "kd": 200,
+      "kv": 200,
+      "kp": 1000,
+      "velocity_limits": [
+        -1,
+        1
+      ],
+      "kp_limits": [
+        0,
+        1000
+      ],
+      "interpolation": null,
+      "ramp_ratio": 0.2,
+      "gripper": {
+        "type": "GRIP",
+        "use_action_scaling": false
+      }
+    },
+    "left": {
+      "type": "JOINT_POSITION",
+      "input_max": 1,
+      "input_min": -1,
+      "input_type": "absolute",
+      "output_max": 0.5,
+      "output_min": -0.5,
+      "kd": 200,
+      "kv": 200,
+      "kp": 1000,
+      "velocity_limits": [
+        -1,
+        1
+      ],
+      "kp_limits": [
+        0,
+        1000
+      ],
+      "interpolation": null,
+      "ramp_ratio": 0.2,
+      "gripper": {
+        "type": "GRIP",
+        "use_action_scaling": false
+      }
+    },
+    "torso": {
+      "type": "JOINT_POSITION",
+      "input_max": 1,
+      "input_min": -1,
+      "input_type": "absolute",
+      "output_max": 0.5,
+      "output_min": -0.5,
+      "kd": 200,
+      "kv": 200,
+      "kp": 1000,
+      "velocity_limits": [
+        -1,
+        1
+      ],
+      "kp_limits": [
+        0,
+        1000
+      ],
+      "interpolation": null,
+      "ramp_ratio": 0.2
+    },
+    "head": {
+      "type": "JOINT_POSITION",
+      "input_max": 1,
+      "input_min": -1,
+      "input_type": "absolute",
+      "output_max": 0.5,
+      "output_min": -0.5,
+      "kd": 200,
+      "kv": 200,
+      "kp": 1000,
+      "velocity_limits": [
+        -1,
+        1
+      ],
+      "kp_limits": [
+        0,
+        1000
+      ],
+      "interpolation": null,
+      "ramp_ratio": 0.2
+    }
+  }
+}
+
+共 1020 条 demo，示例: ['demo_0', 'demo_1', 'demo_10', 'demo_100', 'demo_1000']
+
+--- demo_0 ---
+actions shape: (276, 24)
+obs keys:
+  frontview_image: (276, 84, 84, 3) uint8
+  robot0_base_pos: (276, 3) float64
+  robot0_base_quat: (276, 4) float32
+  robot0_base_to_left_eef_pos: (276, 3) float64
+  robot0_base_to_left_eef_quat: (276, 4) float32
+  robot0_base_to_left_eef_quat_site: (276, 4) float32
+  robot0_base_to_right_eef_pos: (276, 3) float64
+  robot0_base_to_right_eef_quat: (276, 4) float32
+  robot0_base_to_right_eef_quat_site: (276, 4) float32
+  robot0_eye_in_left_hand_image: (276, 84, 84, 3) uint8
+  robot0_eye_in_right_hand_image: (276, 84, 84, 3) uint8
+  robot0_joint_pos: (276, 14) float64
+  robot0_joint_pos_cos: (276, 14) float64
+  robot0_joint_pos_sin: (276, 14) float64
+  robot0_joint_vel: (276, 14) float64
+  robot0_left_eef_pos: (276, 3) float64
+  robot0_left_eef_quat: (276, 4) float64
+  robot0_left_eef_quat_site: (276, 4) float32
+  robot0_left_gripper_qpos: (276, 11) float64
+  robot0_left_gripper_qvel: (276, 11) float64
+  robot0_right_eef_pos: (276, 3) float64
+  robot0_right_eef_quat: (276, 4) float64
+  robot0_right_eef_quat_site: (276, 4) float32
+  robot0_right_gripper_qpos: (276, 11) float64
+  robot0_right_gripper_qvel: (276, 11) float64
+============================================================
+对照上面的输出核对 CONFIG 区域的 ACTION_LAYOUT / STATE_OBS_KEYS / CAMERA_KEY_MAP
