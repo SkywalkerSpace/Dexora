@@ -3,7 +3,7 @@
 """
 python dexmimicgen_to_lerobot.py --inspect /home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5
 
-python dexmimicgen_to_lerobot.py --hdf5_files /home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5 --repo_id dexora_v1 --output_root ../lerobot_data --overwrite
+python dexmimicgen_to_lerobot.py --hdf5_files /home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5 --repo_id two_arm_can_sort_random --output_root ../lerobot_data --overwrite
 
 dexmimicgen (robomimic HDF5) -> LeRobot v2.1 转换脚本
 用于 Dexora 双臂灵巧手 VLA 数据管线（对应步骤1）
