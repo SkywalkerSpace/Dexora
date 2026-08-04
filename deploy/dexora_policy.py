@@ -44,9 +44,9 @@ from models.multimodal_encoder.t5_encoder import T5Embedder
 # producing ``num_cameras * num_patches_per_view`` tokens per timestep.
 DEXORA_CAMERA_ORDER: tuple[str, ...] = (
     "cam_head",          # observation.images.top
+    "cam_right_wrist",   # observation.images.wrist_right
     "cam_left_wrist",    # observation.images.wrist_left
     "cam_third_view",    # observation.images.front
-    "cam_right_wrist",   # observation.images.wrist_right
 )
 
 
