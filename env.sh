@@ -4,7 +4,7 @@ export DEXORA_SIGLIP=google/siglip-so400m-patch14-384
 export DEXORA_STATS=/home/ubuntu/myh/expirement/Dexora/lerobot_data/new_lerobot_stats/dataset_statistics.json
 
 
-"""
+: <<'COMMENT'
 huggingface-cli download google/siglip-so400m-patch14-384 \
     --local-dir google/siglip-so400m-patch14-384 --local-dir-use-symlinks False
 huggingface-cli download google/t5-v1_1-small \
@@ -15,7 +15,7 @@ python -m data.lerobot_vla_dataset --stat \
     --num_samples 1000 \
     --repo_dir   /home/ubuntu/myh/expirement/Dexora/lerobot_data/two_arm_can_sort_random \
     --output_dir new_lerobot_stats
-"""
+COMMENT
 
 echo '---1---'
 
