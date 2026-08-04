@@ -26,7 +26,7 @@ if [[ ! -f "$DEXORA_STATS" ]]; then
     echo "==> Stats file $DEXORA_STATS not found; generating from $DEXORA_LEROBOT_ROOT ..."
     mkdir -p "$(dirname "$DEXORA_STATS")"
     python -m data.lerobot_vla_dataset --stat \
-        --num_samples 5000 \
+        --num_samples 1000 \
         --output_dir "$(dirname "$DEXORA_STATS")" \
         --repo_dir   "$DEXORA_LEROBOT_ROOT"
 fi
