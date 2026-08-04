@@ -101,8 +101,7 @@ CAMERA_KEY_MAP = {
     "wrist_right": "robot0_eye_in_right_hand_image",
     "front": "frontview_image",   # 这个不用改
 }
-# 直接对齐 siglip-so400m-patch14-384 的输入尺寸（384x384），避免训练时先resize到256
-# 再被 SigLIP processor 二次resize到384，两次插值会比一次插值更糊。
+# 直接对齐 siglip-so400m-patch14-384 的输入尺寸（384x384）
 IMAGE_SIZE = (384, 384)  # (H, W)
 
 # --- 5. 每个任务的 5 条语言指令 phrasing，key 用任务名（需能从 hdf5 文件名里匹配到）---

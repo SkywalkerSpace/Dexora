@@ -83,7 +83,7 @@ def parse_args(input_args=None):
     parser.add_argument(
         "--state_dim_keep",
         type=int,
-        default=36,
+        default=24,
         help=(
             "Slice each frame's state/action vector to the first N dims. "
             "Default 36 matches the paper's flat "

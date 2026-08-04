@@ -184,7 +184,7 @@ class VLAConsumerDataset(Dataset):
             self.empty_lang_embed = torch.load("data/empty_lang_embed.pt")
         
         # Load dataset stat
-        with open("configs/dataset_stat.json", 'r') as f:
+        with open("configs/dataset_stat_ours.json", 'r') as f:
             dataset_stat = json.load(f)
         self.dataset_stat = dataset_stat
         

@@ -62,7 +62,7 @@ class DexoraPolicyConfig:
     text_encoder_path: str = "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-small"
     vision_encoder_path: str = "/home/ubuntu/myh/expirement/Dexora/google/siglip-so400m-patch14-384"
 
-    state_dim: int = 36
+    state_dim: int = 24
     chunk_size: int = 32
     img_history_size: int = 1
     cameras: Sequence[str] = DEXORA_CAMERA_ORDER
