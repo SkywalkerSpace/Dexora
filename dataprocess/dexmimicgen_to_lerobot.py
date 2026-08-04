@@ -25,6 +25,7 @@ shape 对照下面 CONFIG 区域逐项核对，尤其是：
 依赖: h5py, numpy, opencv-python, lerobot>=0.3.4 (v2.1 dataset format)
 """
 
+import re
 import argparse
 import json
 import random
@@ -278,6 +279,18 @@ def resolve_task_name(hdf5_path: str) -> str:
     )
 
 
+def get_can_target_color(model_file_xml: str) -> str:
+    cube_rgba = re.search(r'<geom name="cube_g0_vis"[^>]*rgba="([^"]+)"', model_file_xml).group(1)
+    red_rgba  = re.search(r'<geom name="red_box_base_vis"[^>]*rgba="([^"]+)"', model_file_xml).group(1)
+    blue_rgba = re.search(r'<geom name="blue_box_base_vis"[^>]*rgba="([^"]+)"', model_file_xml).group(1)
+    if cube_rgba == red_rgba:
+        return "red"
+    elif cube_rgba == blue_rgba:
+        return "blue"
+    else:
+        return "blue"
+
+
 def convert_one_hdf5(hdf5_path: str, dataset: LeRobotDataset, fps: int, demo_filter: List[str] = None):
     task_name = resolve_task_name(hdf5_path)
     instructions = TASK_INSTRUCTIONS[task_name]
@@ -293,6 +306,18 @@ def convert_one_hdf5(hdf5_path: str, dataset: LeRobotDataset, fps: int, demo_fil
             # 每个 episode 固定用同一条 phrasing（保证一个 episode 内指令不跳变），
             # 5 条 phrasing 在不同 episode 间随机分布，最终整体覆盖到全部 5 条。
             instruction = random.choice(instructions)
+
+            '''
+            model_xml = g.attrs["model_file"] if "model_file" in g.attrs else f[f"data/{demo}"].attrs.get("model_file")
+            color = get_can_target_color(model_xml)
+            instruction = random.choice([
+                f"Sort the {color} can into the correct bin using both arms.",
+                f"Pick up the {color} can and place it in the designated bin.",
+                f"Use both hands to move the {color} can to its sorting bin.",
+                f"Grasp the {color} can and sort it into the correct container.",
+                f"Move the {color} can into the {color} sorting bin.",
+            ])
+            '''
 
             for t in range(num_frames):
                 frame = {
