@@ -68,8 +68,8 @@ assert len(STATE_ACTION_NAMES) == 24
 # 不用动下面的转换逻辑。
 ACTION_LAYOUT = {
     "right_arm": slice(0, 6),
-    "right_hand": slice(6, 12),
-    "left_arm": slice(12, 18),
+    "left_arm": slice(6, 12),
+    "right_hand": slice(12, 18),
     "left_hand": slice(18, 24),
 }
 
