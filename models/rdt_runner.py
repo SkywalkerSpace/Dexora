@@ -64,11 +64,14 @@ class RDTRunner(
             prediction_type=noise_scheduler_config['prediction_type'],
             clip_sample=noise_scheduler_config['clip_sample'],
         )
-        self.noise_scheduler_sample = DPMSolverMultistepScheduler(
+        # 采样也用 DDPM（同一种 scheduler 类型），避免 DPM-Solver 在这套 cosine
+        # schedule 下的收敛/库内部边界问题；步数从 5 提到 30~50，牺牲一点推理速度
+        # 换取稳定收敛。
+        self.noise_scheduler_sample = DDPMScheduler(
             num_train_timesteps=noise_scheduler_config['num_train_timesteps'],
             beta_schedule=noise_scheduler_config['beta_schedule'],
             prediction_type=noise_scheduler_config['prediction_type'],
-            use_karras_sigmas=True,   # <-- 新增：按噪声强度而非均匀 index 分配采样点，少步数下对余弦 schedule 更稳定
+            clip_sample=noise_scheduler_config['clip_sample'],
         )
 
         self.num_train_timesteps = noise_scheduler_config['num_train_timesteps']

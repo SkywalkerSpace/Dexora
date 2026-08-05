@@ -38,7 +38,7 @@ model:
     # DPMSolver++ at inference. 5 steps is the same setting used to produce the
     # numbers in Tab. I/II/III; see README "Inference / Deployment" for the
     # rationale and the trade-off vs. quality.
-    num_inference_timesteps: 5
+    num_inference_timesteps: 50
     beta_schedule: squaredcos_cap_v2
     # Paper §III-C: "The model predicts the action noise \hat{eps}_theta,
     # thereby yielding the predicted action sequence \hat{a}_{t:t+L-1}."
