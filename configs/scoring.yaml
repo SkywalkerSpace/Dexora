@@ -35,7 +35,7 @@ model:
   lang_token_dim: 512
   img_token_dim: 1152
   # Dim of action or proprioception vector
-  state_token_dim: 36
+  state_token_dim: 24
   
   # Config for scoring model
   scoring:
