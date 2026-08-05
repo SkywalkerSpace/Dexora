@@ -6,7 +6,7 @@ common:
   # The number of cameras to be used in the model
   num_cameras: 4
   # Dimension for state/action, we use the same space for both state and action
-  state_dim: 36
+  state_dim: 24
 
 dataset:
   # The path to the buffer (at least 400GB)

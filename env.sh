@@ -51,7 +51,7 @@ SHIGH_FILE=runs/shigh.json \
 echo '---3---'
 
 STAGE1_CKPT=checkpoints/dexora-400m-pretrain \
-SCORING_CKPT=checkpoints/dexora-scoring/final_model/pytorch_model.bin \
+SCORING_CKPT=checkpoints/dexora-scoring/final_model \
 OUTPUT_DIR=checkpoints/dexora-400m-posttrain \
     bash s3_post_train.sh
 
