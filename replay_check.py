@@ -17,7 +17,7 @@ import torch
 
 sys.path.insert(0, ".")  # 确保能 import models/ train/ data/
 
-from models.rdt_runner import RDTRunner
+from models.rdt_runner import RDTRunner, DPMSolverMultistepScheduler
 from models.multimodal_encoder.siglip_encoder import SiglipVisionTower
 from models.multimodal_encoder.t5_encoder import T5Embedder
 from train.dataset import DataCollatorForVLAConsumerDataset, VLAConsumerDataset
@@ -151,8 +151,10 @@ def main():
             # 这个循环本身有 bug（换了 scheduler 依然炸，就是循环本身的问题）。
             orig_scheduler = rdt.noise_scheduler_sample
             orig_num_steps = rdt.num_inference_timesteps
-            rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
-            rdt.num_inference_timesteps = 100                  # 多给点步数，排除少步近似误差
+            # rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
+            # rdt.num_inference_timesteps = 100                  # 多给点步数，排除少步近似误差
+            rdt.noise_scheduler_sample = DPMSolverMultistepScheduler(num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2", prediction_type="epsilon", use_karras_sigmas=True)
+            rdt.num_inference_timesteps = 5
             pred_actions_ddpm = rdt.predict_action(
                 lang_tokens=text_embeds,
                 lang_attn_mask=lang_attn_mask,
