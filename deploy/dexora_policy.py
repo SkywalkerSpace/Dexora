@@ -39,6 +39,8 @@ from models.rdt_runner import RDTRunner
 from models.multimodal_encoder.siglip_encoder import SiglipVisionTower
 from models.multimodal_encoder.t5_encoder import T5Embedder
 
+logging.basicConfig(level=logging.INFO)
+
 # Canonical 4-camera order. The keys here MUST be the ones the inference loop
 # passes in via ``obs['images']``; the values are passed to SigLIP one-by-one,
 # producing ``num_cameras * num_patches_per_view`` tokens per timestep.

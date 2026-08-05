@@ -68,6 +68,7 @@ class RDTRunner(
             num_train_timesteps=noise_scheduler_config['num_train_timesteps'],
             beta_schedule=noise_scheduler_config['beta_schedule'],
             prediction_type=noise_scheduler_config['prediction_type'],
+            use_karras_sigmas=True,   # <-- 新增：按噪声强度而非均匀 index 分配采样点，少步数下对余弦 schedule 更稳定
         )
 
         self.num_train_timesteps = noise_scheduler_config['num_train_timesteps']
