@@ -151,29 +151,11 @@ def main():
             # 这个循环本身有 bug（换了 scheduler 依然炸，就是循环本身的问题）。
             orig_scheduler = rdt.noise_scheduler_sample
             orig_num_steps = rdt.num_inference_timesteps
-            # rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
-            # rdt.num_inference_timesteps = 100                  # 多给点步数，排除少步近似误差
-            # rdt.noise_scheduler_sample = DPMSolverMultistepScheduler(num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2", prediction_type="epsilon", use_karras_sigmas=True)
+            rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
+            rdt.num_inference_timesteps = 50                  # 多给点步数，排除少步近似误差
+            # rdt.noise_scheduler_sample = DPMSolverMultistepScheduler(
+            #     num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2", prediction_type="epsilon", use_karras_sigmas=True)
             # rdt.num_inference_timesteps = 5
-
-
-            self.noise_scheduler = DDPMScheduler(
-                num_train_timesteps=noise_scheduler_config['num_train_timesteps'],
-                beta_schedule=noise_scheduler_config['beta_schedule'],
-                prediction_type=noise_scheduler_config['prediction_type'],
-                clip_sample=noise_scheduler_config['clip_sample'],
-            )
-            # 采样也用 DDPM（同一种 scheduler 类型），避免 DPM-Solver 在这套 cosine
-            # schedule 下的收敛/库内部边界问题；步数从 5 提到 30~50，牺牲一点推理速度
-            # 换取稳定收敛。
-            self.noise_scheduler_sample = DDPMScheduler(
-                num_train_timesteps=noise_scheduler_config['num_train_timesteps'],
-                beta_schedule=noise_scheduler_config['beta_schedule'],
-                prediction_type=noise_scheduler_config['prediction_type'],
-                clip_sample=noise_scheduler_config['clip_sample'],
-            )
-            self.num_inference_timesteps = 50   # 先用 50 打底，稳定后再往下探
-
             pred_actions_ddpm = rdt.predict_action(
                 lang_tokens=text_embeds,
                 lang_attn_mask=lang_attn_mask,
