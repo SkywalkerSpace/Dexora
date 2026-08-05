@@ -151,7 +151,7 @@ def main():
             # 这个循环本身有 bug（换了 scheduler 依然炸，就是循环本身的问题）。
             orig_scheduler = rdt.noise_scheduler_sample
             orig_num_steps = rdt.num_inference_timesteps
-            rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
+            # rdt.noise_scheduler_sample = rdt.noise_scheduler  # 换成训练用的 DDPMScheduler
             rdt.num_inference_timesteps = 50                  # 多给点步数，排除少步近似误差
             # rdt.noise_scheduler_sample = DPMSolverMultistepScheduler(
             #     num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2", prediction_type="epsilon", use_karras_sigmas=True)
@@ -167,7 +167,7 @@ def main():
             rdt.noise_scheduler_sample = orig_scheduler
             rdt.num_inference_timesteps = orig_num_steps
 
-            print("pred_actions_ddpm[0,0] (用训练用 DDPMScheduler, 100步):",
+            print("pred_actions_ddpm[0,0] (用训练用 DDPMScheduler):",
                   pred_actions_ddpm[0, 0].cpu().numpy())
             mse_ddpm = torch.nn.functional.mse_loss(pred_actions_ddpm, actions_gt).item()
             print(f"MSE(pred_ddpm, gt) over full chunk: {mse_ddpm:.6f}")
