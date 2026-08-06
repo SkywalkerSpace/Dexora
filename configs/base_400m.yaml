@@ -23,7 +23,7 @@ model:
   lang_adaptor: mlp2x_gelu
   img_adaptor: mlp2x_gelu
   state_adaptor: mlp3x_gelu
-  lang_token_dim: 768             # T5-base
+  lang_token_dim: 1024             # T5-large
   img_token_dim: 1152              # SigLip-SO400M
   state_token_dim: 24
   rdt:

@@ -49,7 +49,7 @@ class ScoringModel(nn.Module):
         num_heads=8,
         max_lang_cond_len=1024,
         img_cond_len=4096,
-        lang_token_dim=768,
+        lang_token_dim=1024,
         img_token_dim=1152,
         lang_pos_embed_config=None,
         img_pos_embed_config=None,

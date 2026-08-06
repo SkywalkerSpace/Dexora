@@ -6,6 +6,7 @@ class T5Embedder:
     available_models = [
         "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-small",
         "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-base",
+        "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-large",
         "google/t5-v1_1-small",
         "google/t5-v1_1-base",
         "google/t5-v1_1-large",
