@@ -506,7 +506,7 @@ def main():
             if 'state_indicator' in data:
                 data['state_elem_mask'] = data.pop('state_indicator')
             if 'lang_embed' not in data and 'input_ids' not in data:
-                data['lang_embed'] = torch.zeros(1, 512)
+                data['lang_embed'] = torch.zeros(1, 768)
 
             # Add images if missing, using mean-color background (match train/dataset.py)
             if 'images' not in data:

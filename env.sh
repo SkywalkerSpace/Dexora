@@ -1,5 +1,5 @@
 export DEXORA_LEROBOT_ROOT=/home/ubuntu/myh/expirement/Dexora/lerobot_data/two_arm_can_sort_random
-export DEXORA_T5=google/t5-v1_1-small
+export DEXORA_T5=google/t5-v1_1-base
 export DEXORA_SIGLIP=google/siglip-so400m-patch14-384
 export DEXORA_STATS=/home/ubuntu/myh/expirement/Dexora/lerobot_data/new_lerobot_stats/dataset_statistics.json
 
@@ -7,8 +7,8 @@ export DEXORA_STATS=/home/ubuntu/myh/expirement/Dexora/lerobot_data/new_lerobot_
 : <<'COMMENT'
 huggingface-cli download google/siglip-so400m-patch14-384 \
     --local-dir google/siglip-so400m-patch14-384 --local-dir-use-symlinks False
-huggingface-cli download google/t5-v1_1-small \
-    --local-dir google/t5-v1_1-small              --local-dir-use-symlinks False
+huggingface-cli download google/t5-v1_1-base \
+    --local-dir google/t5-v1_1-base              --local-dir-use-symlinks False
 
 
 python -m data.lerobot_vla_dataset --stat \
