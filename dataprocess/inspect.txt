@@ -1,6 +1,6 @@
-python dexmimicgen_to_lerobot.py --inspect  '/home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5' 
+python dexmimicgen_to_lerobot.py --inspect  '/home/ubuntu/myh/experiment/dexmimicgen/datasets/two_arm_can_sort_random.hdf5' 
 ============================================================
-文件: /home/ubuntu/myh/expirement/dexmimicgen/datasets/two_arm_can_sort_random.hdf5
+文件: /home/ubuntu/myh/experiment/dexmimicgen/datasets/two_arm_can_sort_random.hdf5
 env_args.env_name: TwoArmCanSortBlue
 env_args.env_kwargs.robots: ['GR1ArmsOnly']
 controller_configs:

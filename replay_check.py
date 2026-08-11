@@ -8,7 +8,7 @@
 分布式那一层，加上逐样本的原始数值打印，方便对照。
 
 用法:
-    cd /home/ubuntu/myh/expirement/Dexora
+    cd /home/ubuntu/myh/experiment/Dexora
     python replay_check.py
 """
 import sys
@@ -27,12 +27,12 @@ from train.dataset import DataCollatorForVLAConsumerDataset, VLAConsumerDataset
 # —— 尤其 STATE_DIM_KEEP / DATASET_TYPE / LOAD_FROM 三项，
 #    麻烦对照你训练脚本里的 --state_dim_keep / --dataset_type / --load_from 改。
 # ============================================================
-MODEL_CONFIG_PATH = "/home/ubuntu/myh/expirement/Dexora/configs/base_400m.yaml"
-CHECKPOINT_DIR     = "/home/ubuntu/myh/expirement/Dexora/checkpoints/dexora-400m-pretrain/"
-TEXT_ENCODER_PATH  = "/home/ubuntu/myh/expirement/Dexora/google/t5-v1_1-small"
-VISION_ENCODER_PATH= "/home/ubuntu/myh/expirement/Dexora/google/siglip-so400m-patch14-384"
-LEROBOT_ROOT        = "/home/ubuntu/myh/expirement/Dexora/lerobot_data/two_arm_can_sort_random"
-STATS_FILE          = "/home/ubuntu/myh/expirement/Dexora/lerobot_data/new_lerobot_stats/dataset_statistics.json"
+MODEL_CONFIG_PATH = "/home/ubuntu/myh/experiment/Dexora/configs/base_400m.yaml"
+CHECKPOINT_DIR     = "/home/ubuntu/myh/experiment/Dexora/checkpoints/dexora-400m-pretrain/"
+TEXT_ENCODER_PATH  = "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-small"
+VISION_ENCODER_PATH= "/home/ubuntu/myh/experiment/Dexora/google/siglip-so400m-patch14-384"
+LEROBOT_ROOT        = "/home/ubuntu/myh/experiment/Dexora/lerobot_data/two_arm_can_sort_random"
+STATS_FILE          = "/home/ubuntu/myh/experiment/Dexora/lerobot_data/new_lerobot_stats/dataset_statistics.json"
 
 DATASET_TYPE       = "finetune"   # <-- 对照 --dataset_type 确认
 LOAD_FROM           = "lerobot"    # <-- 对照 --load_from 确认
