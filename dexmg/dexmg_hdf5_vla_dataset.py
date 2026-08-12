@@ -25,6 +25,12 @@ Dexora 的新数据后端：直接从 dexmimicgen 原始 hdf5 读取，不经过
 
 依赖 robomimic（pip install -e libs/robomimic），复用它的
 SequenceDataset 做 hdf5 缓存/帧堆叠/滑窗/demo过滤，不重复造轮子。
+
+维度（共享物理槽位版，见 dexmg_schema.py）：
+    ACTION_DIM = 30，panda 组和 humanoid 组共用同一套槽位
+    （right_arm_pos/right_arm_rot6d/right_gripper/left_arm_pos/
+    left_arm_rot6d/left_gripper），不是各占一段；旋转统一存 6D。
+    STATE_DIM 探测得到，同样是共享槽位 + gripper 部分 padding。
 """
 
 from __future__ import annotations
@@ -42,7 +48,7 @@ from robomimic.utils.dataset import SequenceDataset
 from dexmg_camera import build_camera_key_map, extract_camera_images
 from dexmg_config import DATASET_CONFIGS, DatasetConfig, get_dataset_config
 from dexmg_convert import build_unified_action, build_unified_state
-from dexmg_schema import ACTION_DIM, StateSlot, build_state_schema
+from dexmg_schema import ACTION_DIM, UnifiedStateSchema, build_state_schema
 
 
 class _SingleDexmgReader:
@@ -52,8 +58,7 @@ class _SingleDexmgReader:
         self,
         hdf5_path: str,
         cfg: DatasetConfig,
-        state_slots: Dict[str, StateSlot],
-        state_dim: int,
+        state_schema: UnifiedStateSchema,
         seq_length: int,
         frame_stack: int,
         filter_key: Optional[str],
@@ -61,8 +66,7 @@ class _SingleDexmgReader:
     ):
         self.hdf5_path = hdf5_path
         self.cfg = cfg
-        self.state_slots = state_slots
-        self.state_dim = state_dim
+        self.state_schema = state_schema
         self.image_shape = image_shape
         self.cam_map = build_camera_key_map(cfg)
 
@@ -120,9 +124,9 @@ class _SingleDexmgReader:
         raw = self._seq_ds.get_item(index)  # {"obs": {...}, "actions": (T, group_action_dim), ...}
         demo_id, frame_indices = self._frame_indices_for(index)
 
-        # --- state / action 拼进统一 schema ---
+        # --- state / action 拼进统一(共享物理槽位) schema ---
         unified_state, state_mask = build_unified_state(
-            raw["obs"], self.cfg, self.state_slots, self.state_dim
+            raw["obs"], self.cfg, self.state_schema
         )
         # robomimic 已经把 action_keys 按顺序 concat 好放进 raw["actions"]，
         # 这里再拆回 action_dict 是为了复用 build_unified_action 的按-key拼接逻辑，
@@ -190,9 +194,10 @@ class DexmgHDF5VLADataset:
         dataset_weights = dataset_weights or {}
         schema_cache_dir = schema_cache_dir or dataset_root
 
-        self.state_slots, self.state_dim = build_state_schema(
+        self.state_schema = build_state_schema(
             dataset_root=dataset_root, cache_dir=schema_cache_dir
         )
+        self.state_dim = self.state_schema.state_dim
         self.action_dim = ACTION_DIM
 
         self._readers: List[_SingleDexmgReader] = []
@@ -204,8 +209,7 @@ class DexmgHDF5VLADataset:
             reader = _SingleDexmgReader(
                 hdf5_path=hdf5_path,
                 cfg=cfg,
-                state_slots=self.state_slots,
-                state_dim=self.state_dim,
+                state_schema=self.state_schema,
                 seq_length=seq_length,
                 frame_stack=frame_stack,
                 filter_key=filter_keys.get(hdf5_name),

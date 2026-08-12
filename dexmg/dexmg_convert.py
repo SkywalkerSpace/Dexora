@@ -1,63 +1,73 @@
 # -*- coding: utf-8 -*-
 """
-dexmg_convert.py
+dexmg_convert.py (重写版 —— 写入共享物理槽位)
 
-方案 B 的核心：把某个 embodiment group 原生的 action_dict / obs_dict
-按固定顺序拼接，写进 dexmg_schema.py 定义的 superset 向量里对应的槽
-位，其余槽位保持 0。不做任何 abs<->rel / axis_angle<->rot6d 的格式
-转换——两种表示原样保留，靠模型自己在训练里学会按 mask/embodiment
-区分。
+两组的 action_dict/obs_dict 字段名不同，但物理含义一一对应：
+
+    槽位            panda组来源                          humanoid组来源
+    right_arm_pos   right_rel_pos (3)                    right_abs_pos (3)
+    right_arm_rot6d axis_angle_to_rot6d(right_rel_rot_axis_angle)   right_abs_rot_6d (已是6D，直接用)
+    right_gripper   right_gripper (6)                     right_gripper (6)
+    left_*          同理
+
+    state 的 pos/quat 同理：quat 統一转成 rot6d
+    (quat_to_rot6d)，gripper_qpos 按各自真实宽度写入槽位前段，
+    其余(padding)部分保持0，对应 mask 里已经标为0。
+
+不做 rel<->abs 转换：right_arm_pos 槽位里 panda 组存的是"相对位移"，
+humanoid 组存的是"绝对位置"，数值语义不同，但物理意义（右臂位置这个
+自由度）相同，靠各自独立的归一化统计量 + 数据集条件让模型学会区分。
 """
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 
 from dexmg_config import DatasetConfig
-from dexmg_schema import (
-    ACTION_DIM,
-    ACTION_SLOTS_BY_GROUP,
-    StateSlot,
-    action_group_mask,
-    state_group_mask,
-)
+from dexmg_rotation import axis_angle_to_rot6d, quat_to_rot6d
+from dexmg_schema import ACTION_DIM, ACTION_SLOT_BY_NAME, UnifiedStateSchema, action_group_mask, state_group_mask
 
 
-def _concat_action_dict(action_dict: Dict[str, np.ndarray], key_order) -> np.ndarray:
-    """按 key_order 顺序把 action_dict 里的分量拼接成一个向量。
-
-    action_dict[key] 形状假设为 (T, d_k) 或 (d_k,)；返回 (T, sum(d_k)) 或 (sum(d_k),)。
+def build_unified_action(action_dict: Dict[str, np.ndarray], cfg: DatasetConfig) -> Tuple[np.ndarray, np.ndarray]:
     """
-    parts = [np.asarray(action_dict[k]) for k in key_order]
-    return np.concatenate(parts, axis=-1)
-
-
-def build_unified_action(action_dict: Dict[str, np.ndarray], cfg: DatasetConfig) -> "tuple[np.ndarray, np.ndarray]":
-    """
-    action_dict: robomimic 从 hdf5 读出来的原始 action_dict
-                 (key 为 cfg["action_keys"] 里那几个，如 right_rel_pos 等)
-    返回 (unified_action, mask)：
-        - unified_action: (..., ACTION_DIM)，只有本 group 的槽位有真实值，其余为0
-        - mask:           (ACTION_DIM,)，本 group 槽位=1，其余=0
+    action_dict: robomimic 读出的原始 action_dict（key 为 cfg["action_keys"]）
+    返回 (unified_action[..., ACTION_DIM], mask[ACTION_DIM])
     """
     group = cfg["embodiment_group"]
-    flat = _concat_action_dict(action_dict, cfg["action_keys"])  # (..., group_dim)
 
-    lead_shape = flat.shape[:-1]
+    if group == "panda":
+        right_pos = np.asarray(action_dict["right_rel_pos"])
+        right_rot6d = axis_angle_to_rot6d(action_dict["right_rel_rot_axis_angle"])
+        right_gripper = np.asarray(action_dict["right_gripper"])
+        left_pos = np.asarray(action_dict["left_rel_pos"])
+        left_rot6d = axis_angle_to_rot6d(action_dict["left_rel_rot_axis_angle"])
+        left_gripper = np.asarray(action_dict["left_gripper"])
+    elif group == "humanoid":
+        right_pos = np.asarray(action_dict["right_abs_pos"])
+        right_rot6d = np.asarray(action_dict["right_abs_rot_6d"])  # 已经是 6D，不用转换
+        right_gripper = np.asarray(action_dict["right_gripper"])
+        left_pos = np.asarray(action_dict["left_abs_pos"])
+        left_rot6d = np.asarray(action_dict["left_abs_rot_6d"])
+        left_gripper = np.asarray(action_dict["left_gripper"])
+    else:
+        raise ValueError(f"未知 embodiment_group: {group}")
+
+    lead_shape = right_pos.shape[:-1]
     unified = np.zeros((*lead_shape, ACTION_DIM), dtype=np.float32)
 
-    slot_offset = 0
-    for slot in ACTION_SLOTS_BY_GROUP[group]:
-        # cfg["action_keys"] 里每个 key 的维度之和要正好等于该 group 槽位的总维度，
-        # 这里按 flat 里的顺序依次填入每个槽位。
-        unified[..., slot.offset: slot.offset + slot.dim] = flat[..., slot_offset: slot_offset + slot.dim]
-        slot_offset += slot.dim
-    assert slot_offset == flat.shape[-1], (
-        f"group={group} 的 action_keys 总维度({flat.shape[-1]}) 和 schema 里"
-        f"该 group 槽位总维度({slot_offset}) 不一致，检查 dexmg_schema.py 的 ACTION_SLOTS"
-    )
+    def _place(name: str, value: np.ndarray):
+        slot = ACTION_SLOT_BY_NAME[name]
+        assert value.shape[-1] == slot.dim, f"{name}: 期望{slot.dim}维, 实际{value.shape[-1]}维"
+        unified[..., slot.offset: slot.offset + slot.dim] = value
+
+    _place("right_arm_pos", right_pos)
+    _place("right_arm_rot6d", right_rot6d)
+    _place("right_gripper", right_gripper)
+    _place("left_arm_pos", left_pos)
+    _place("left_arm_rot6d", left_rot6d)
+    _place("left_gripper", left_gripper)
 
     mask = action_group_mask(group)
     return unified, mask
@@ -66,26 +76,40 @@ def build_unified_action(action_dict: Dict[str, np.ndarray], cfg: DatasetConfig)
 def build_unified_state(
     obs_dict: Dict[str, np.ndarray],
     cfg: DatasetConfig,
-    state_slots: Dict[str, StateSlot],
-    state_dim: int,
-) -> "tuple[np.ndarray, np.ndarray]":
+    schema: UnifiedStateSchema,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    obs_dict: robomimic 读出的原始 obs 字典 (key 为 cfg["low_dim_keys"])
-    返回 (unified_state, mask)，语义同 build_unified_action。
+    obs_dict: robomimic 读出的原始 obs 字典（key 为 cfg["low_dim_keys"]）
+    返回 (unified_state[..., state_dim], mask[state_dim])
     """
+    from dexmg_schema import _low_dim_key_roles  # 复用同一份 key 角色解析逻辑
+
     group = cfg["embodiment_group"]
-    slot = state_slots[f"{group}_state"]
+    roles = _low_dim_key_roles(cfg)
 
-    flat = _concat_action_dict(obs_dict, cfg["low_dim_keys"])  # (..., group_dim)
-    assert flat.shape[-1] == slot.dim, (
-        f"group={group} 的 low_dim 实际总维度({flat.shape[-1]}) 和探测缓存里的"
-        f"槽位维度({slot.dim}) 不一致，数据可能变了，重新跑一次 "
-        f"build_state_schema(force_recompute=True)"
-    )
+    right_pos = np.asarray(obs_dict[roles["right"]["pos"]])
+    right_rot6d = quat_to_rot6d(obs_dict[roles["right"]["quat"]])
+    right_gripper = np.asarray(obs_dict[roles["right"]["gripper"]])
+    left_pos = np.asarray(obs_dict[roles["left"]["pos"]])
+    left_rot6d = quat_to_rot6d(obs_dict[roles["left"]["quat"]])
+    left_gripper = np.asarray(obs_dict[roles["left"]["gripper"]])
 
-    lead_shape = flat.shape[:-1]
-    unified = np.zeros((*lead_shape, state_dim), dtype=np.float32)
-    unified[..., slot.offset: slot.offset + slot.dim] = flat
+    lead_shape = right_pos.shape[:-1]
+    unified = np.zeros((*lead_shape, schema.state_dim), dtype=np.float32)
 
-    mask = state_group_mask(state_slots, state_dim, group)
+    def _place(name: str, value: np.ndarray):
+        slot = schema.slots[name]
+        w = value.shape[-1]
+        assert w <= slot.dim, f"{name}: 槽位宽度{slot.dim} < 实际数据宽度{w}，探测缓存可能过期"
+        # 真实值放在槽位前 w 维，其余(padding)保持0，对应 mask 会把这部分标 0
+        unified[..., slot.offset: slot.offset + w] = value
+
+    _place("right_arm_pos", right_pos)
+    _place("right_arm_rot6d", right_rot6d)
+    _place("right_gripper", right_gripper)
+    _place("left_arm_pos", left_pos)
+    _place("left_arm_rot6d", left_rot6d)
+    _place("left_gripper", left_gripper)
+
+    mask = state_group_mask(schema, group)
     return unified, mask
