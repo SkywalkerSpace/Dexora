@@ -12,12 +12,12 @@
 | `dexmg_hdf5_vla_dataset.py` | 真正的 Dataset 类 `DexmgHDF5VLADataset`，满足 Dexora `VLAConsumerDataset` 要求的 `get_item()`/`__len__()` 契约 |
 | `compute_dexmg_stats.py` | 训练前离线跑一次的统计量脚本；槽位共享但数值语义不同，**统计量依然按 group 分别算** |
 
-## 维度（比上一版的 54 维小，且两组共享，不是各占一段）
+## 维度（不再是写死的常量，两侧 gripper 宽度都探测出来）
 
-- `ACTION_DIM = 30`：`right_arm_pos(3) / right_arm_rot6d(6) / right_gripper(6) / left_arm_pos(3) / left_arm_rot6d(6) / left_gripper(6)`。panda 组的 axis-angle 转成 6D 写进同一槽位，humanoid 组本来就是 6D 直接写。两组当前都是满槽位，`action_mask` 恒为全 1（为以后接入缺自由度的新 embodiment 保留这个接口）。
-- `STATE_DIM`：槽位结构同上（pos=3, rot6d=6 固定），只有 `right_gripper`/`left_gripper` 两个槽位的宽度是探测出来的（两组里较大的真实宽度），较窄那组会 padding+mask=0。缓存进 `dexmg_unified_schema_cache.json`。
-- **旋转格式**：quaternion（state）/axis-angle（panda action）都转成 6D；这是无损格式转换，和"要不要把 abs 转成 rel"（我们明确决定不做）是两回事。
-- **rel vs abs 语义差异**：不用额外维度区分，靠每个数据集独立的归一化统计量 + RDT 自带的 dataset/instruction conditioning 让模型隐式学会区分。
+- `right_arm_pos(3) / right_arm_rot6d(6) / right_gripper(探测) / left_arm_pos(3) / left_arm_rot6d(6) / left_gripper(探测)`，state 和 action 分别探测、分别缓存（同名槽位但物理含义不同，不能共用同一份探测结果）。
+- **上一版的 bug**：曾经假设两组的 `right_gripper`/`left_gripper` 都是 6 维（从 panda 组的数据打印抄的），humanoid 组实际宽度不一样，直接崩了。现在改成直接读 `data/{demo}/action_dict/{key}` 的真实 shape，不再假设任何维度数字。
+- gripper 槽位宽度 = 两组里较大的真实宽度，较窄那组自动 padding 补 0 + mask=0。`mask` 现在两侧（state/action）都可能不是全 1 了（取决于两组 gripper 宽度是否一致）。
+- 旋转格式：quaternion（state）/axis-angle（panda action）都转成 6D；rel vs abs 语义差异不占维度，靠各自数据集独立的归一化统计量 + RDT 的 dataset/instruction conditioning 隐式区分。
 
 ## 使用步骤
 
@@ -52,7 +52,7 @@
 
    然后训练时用 `use_hdf5="dexmg_hdf5"` 启动即可。
 
-3. **模型侧**：`RDTRunner` 的 `state_dim`/`action_dim` 改成新的 `STATE_DIM`/`ACTION_DIM=30`（`state_adaptor`/`final_layer.ffn_final` 会随之重新初始化，符合你们之前确认过的"只有这两层需要按新维度重建，其余 28 层 backbone 不受影响"的结论）。
+3. **模型侧**：`RDTRunner` 的 `state_dim`/`action_dim` 改成 `DexmgHDF5VLADataset.state_dim`/`.action_dim`（跑一遍 `compute_dexmg_stats.py` 或实例化一次 dataset 就能拿到实际数字，不用手算）。
 4. **`compute_loss` 调用处**：把 `_SingleDexmgReader.get_item()` 里新增的 `action_mask` 字段传给 `RDTRunner.compute_loss(..., action_mask=...)`（现有代码大概率已经在传某种 action_mask，确认一下是不是直接复用这个字段，还是需要在 collator 里再包一层）。
 
 ## 待你核实/决定的点（代码里都留了标记）

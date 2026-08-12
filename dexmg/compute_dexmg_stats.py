@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-compute_dexmg_stats.py (重写版 —— 适配共享物理槽位 schema)
+compute_dexmg_stats.py (第二次重写 —— action 分量直接读 action_dict/{key})
 
-即使两组共用同一套槽位名字（right_arm_pos 等），数值语义仍然不同
-（panda组是相对位移、humanoid组是绝对位置），所以统计量依然必须
-按 group 分开算，不能把两组数据混在一起统计——这点和上一版一样，
-只是现在"槽位"本身是共享的，"统计量"仍然是按组独立的。
+上一版的 bug 就出在这个文件：用一张写死的 {key: dim} 表去切分 flat
+"actions" 向量，humanoid 组的 gripper 实际宽度和表里的假设不一致，
+切出界后 numpy 静默返回空数组。这版改成直接读 hdf5 里已经存好的
+data/{demo}/action_dict/{key}，宽度是多少读出来就是多少。
 
 用法：
     python compute_dexmg_stats.py \
@@ -25,27 +25,20 @@ import numpy as np
 
 from dexmg_config import DATASET_CONFIGS
 from dexmg_convert import build_unified_action, build_unified_state
-from dexmg_schema import ACTION_DIM, action_group_mask, build_state_schema, state_group_mask
+from dexmg_schema import build_schema
 
 
 def _iter_demo_low_dim_and_actions(hdf5_path: str, cfg):
-    from dexmg_hdf5_vla_dataset import _ACTION_KEY_DIMS  # 复用同一份维度表
-
+    needed_action_keys = set(cfg["action_keys"]) | {"right_gripper", "left_gripper"}
     with h5py.File(hdf5_path, "r") as f:
         for demo_id in f["data"].keys():
             obs = {k: f[f"data/{demo_id}/obs/{k}"][()] for k in cfg["low_dim_keys"]}
-            action_dict = {}
-            offset = 0
-            flat_action = f[f"data/{demo_id}/actions"][()]
-            for key in cfg["action_keys"]:
-                dim = _ACTION_KEY_DIMS[key]
-                action_dict[key] = flat_action[..., offset: offset + dim]
-                offset += dim
+            action_grp = f[f"data/{demo_id}/action_dict"]
+            action_dict = {k: action_grp[k][()] for k in needed_action_keys}
             yield obs, action_dict
 
 
 def _stats_from_stack(x: np.ndarray, valid_mask: np.ndarray) -> dict:
-    """x: [N, D]，valid_mask: [D] 里为 1 的维度才参与统计，其余维度(padding)填默认值。"""
     D = x.shape[-1]
     mean = np.zeros(D, dtype=np.float64)
     std = np.ones(D, dtype=np.float64)
@@ -72,8 +65,7 @@ def _stats_from_stack(x: np.ndarray, valid_mask: np.ndarray) -> dict:
 
 def main(dataset_root: str, out_dir: str):
     os.makedirs(out_dir, exist_ok=True)
-    schema = build_state_schema(dataset_root=dataset_root, cache_dir=out_dir)
-    state_dim = schema.state_dim
+    schema = build_schema(dataset_root=dataset_root, cache_dir=out_dir)
 
     group_states = defaultdict(list)
     group_actions = defaultdict(list)
@@ -90,9 +82,9 @@ def main(dataset_root: str, out_dir: str):
 
         for obs, action_dict in _iter_demo_low_dim_and_actions(hdf5_path, cfg):
             unified_state, _ = build_unified_state(obs, cfg, schema)
-            unified_action, _ = build_unified_action(action_dict, cfg)
-            group_states[group].append(unified_state.reshape(-1, state_dim))
-            group_actions[group].append(unified_action.reshape(-1, ACTION_DIM))
+            unified_action, _ = build_unified_action(action_dict, cfg, schema)
+            group_states[group].append(unified_state.reshape(-1, schema.state.dim))
+            group_actions[group].append(unified_action.reshape(-1, schema.action.dim))
 
     group_state_stats = {}
     group_action_stats = {}
@@ -100,13 +92,12 @@ def main(dataset_root: str, out_dir: str):
         states = np.concatenate(group_states[group], axis=0)
         actions = np.concatenate(group_actions[group], axis=0)
 
-        s_mask = state_group_mask(schema, group)
-        a_mask = action_group_mask(group)
+        s_mask = schema.state.group_mask(group)
+        a_mask = schema.action.group_mask(group)
         group_state_stats[group] = _stats_from_stack(states, s_mask)
         group_action_stats[group] = _stats_from_stack(actions, a_mask)
         print(f"[stats] group={group}: {states.shape[0]} frames")
 
-    # ---- 写 dataset_statistics.json（增量合并） ----
     stats_path = os.path.join(out_dir, "dataset_statistics.json")
     all_stats = {}
     if os.path.exists(stats_path):
@@ -121,7 +112,6 @@ def main(dataset_root: str, out_dir: str):
         json.dump(all_stats, f, indent=2)
     print(f"写入 {stats_path}")
 
-    # ---- 写 dataset_stat_ours.json（增量合并，state_mean 给 mask 替换用） ----
     stat_ours_path = os.path.join(out_dir, "dataset_stat_ours.json")
     stat_ours = {}
     if os.path.exists(stat_ours_path):
