@@ -179,14 +179,7 @@ class VLAConsumerDataset(Dataset):
             self.hdf5_dataset = DexmgHDF5VLADataset(
                 dataset_root="/mnt/2t/myh/experiment/checkpoints",
                 stats_file="configs/dataset_statistics.json",
-                filter_keys={
-                    "two_arm_box_cleanup.hdf5": "1000_demos",
-                    "two_arm_drawer_cleanup.hdf5": "1000_demos",
-                    "two_arm_lift_tray.hdf5": "1000_demos",
-                    "two_arm_can_sort_random.hdf5": "1000_demos",
-                    "two_arm_pouring.hdf5": "1000_demos",
-                    "two_arm_coffee.hdf5": "1000_demos",
-                },
+                filter_keys={},
                 schema_cache_dir="configs/",
             )
         else:
