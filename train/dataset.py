@@ -178,7 +178,7 @@ class VLAConsumerDataset(Dataset):
             from dexmg.dexmg_hdf5_vla_dataset import DexmgHDF5VLADataset
             self.hdf5_dataset = DexmgHDF5VLADataset(
                 dataset_root="/mnt/2t/myh/experiment/checkpoints",
-                stats_file="configs/dataset_statistics.json",
+                stats_file="dexmg/configs/dataset_statistics.json",
                 filter_keys={},
                 schema_cache_dir="configs/",
             )
