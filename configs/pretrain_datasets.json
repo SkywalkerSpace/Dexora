@@ -44,5 +44,11 @@
     "roboset",
     "rh20t",
     "calvin",
-    "bridgev2"
+    "bridgev2",
+    "dexmg_two_arm_box_cleanup",
+    "dexmg_two_arm_lift_tray",
+    "dexmg_two_arm_drawer_cleanup",
+    "dexmg_two_arm_pouring",
+    "dexmg_two_arm_coffee",
+    "dexmg_two_arm_can_sort_random"
 ]

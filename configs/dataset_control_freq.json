@@ -63,5 +63,11 @@
     "agilex": 25,
     "rh20t": 10,
     "calvin": 30,
-    "bridgev2": 5
+    "bridgev2": 5,
+    "dexmg_two_arm_box_cleanup": 20,
+    "dexmg_two_arm_lift_tray": 20,
+    "dexmg_two_arm_drawer_cleanup": 20,
+    "dexmg_two_arm_pouring": 20,
+    "dexmg_two_arm_coffee": 20,
+    "dexmg_two_arm_can_sort_random": 20
 }
