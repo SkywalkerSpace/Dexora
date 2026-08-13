@@ -72,6 +72,17 @@ class _SingleDexmgReader:
         self.image_shape = image_shape
         self.cam_map = build_camera_key_map(cfg)
 
+        # 注意：dexmimicgen 把 action 分量存在 data/{ep}/action_dict/{key} 下（不是
+        # data/{ep}/{key} 顶层），而 robomimic SequenceDataset 内部（get_action_traj 等）
+        # 是直接拼接 "data/{ep}/{action_key}" 去读的，所以传给 SequenceDataset 的
+        # action_keys/action_config 必须带上 "action_dict/" 前缀。
+        # 这个前缀只在这里、局部用于构造 SequenceDataset —— 不写回 self.cfg，
+        # 因为 _read_action_dict()/dexmg_convert.build_unified_action() 用的是
+        # cfg["action_keys"] 的裸 key 名（grp 本身已经是 action_dict group，
+        # 再加前缀会多找一层不存在的子 group）。
+        seq_action_keys = [f"action_dict/{k}" for k in cfg["action_keys"]]
+        seq_action_config = {f"action_dict/{k}": v for k, v in cfg["action_config"].items()}
+
         self._seq_ds = SequenceDataset(
             hdf5_path=hdf5_path,
             obs_keys=cfg["low_dim_keys"],
@@ -86,8 +97,8 @@ class _SingleDexmgReader:
             hdf5_use_swmr=True,
             hdf5_normalize_obs=False,
             filter_by_attribute=filter_key,
-            action_keys=cfg["action_keys"],
-            action_config=cfg["action_config"],
+            action_keys=seq_action_keys,
+            action_config=seq_action_config,
         )
 
         self._h5file = h5py.File(hdf5_path, "r", swmr=True)
