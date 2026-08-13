@@ -63,6 +63,8 @@ class _SingleDexmgReader:
             hdf5_use_swmr=True,
             hdf5_normalize_obs=False,
             filter_by_attribute=filter_key,
+            action_keys=cfg["action_keys"],
+            action_config=cfg["action_config"],
         )
 
         self._h5file = h5py.File(hdf5_path, "r", swmr=True)

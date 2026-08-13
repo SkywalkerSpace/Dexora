@@ -36,6 +36,7 @@ class DatasetConfig(TypedDict):
     has_cam_high: bool  # 这个 hdf5 里 image_keys[0] 是否其实是 agentview(=cam_high)
     low_dim_keys: List[str]
     action_keys: List[str]
+    action_config: Dict[str, Dict[str, Optional[str]]]
     lang: str
 
 
@@ -50,6 +51,11 @@ _PANDA_ACTION_KEYS = [
     "right_rel_pos", "right_rel_rot_axis_angle", "right_gripper",
     "left_rel_pos", "left_rel_rot_axis_angle", "left_gripper",
 ]
+# robomimic SequenceDataset 的必填参数：每个 action_keys 里的 key 都要在这里有对应条目。
+# normalization 统一设为 None —— 归一化/格式转换已经在 dexmg_convert.py / dexmg_rotation.py /
+# compute_dexmg_stats.py 里自己离线做了，这里只让 robomimic 老实读出原始值，不要让它做
+# 二次归一化或运行时格式转换（不设 format / convert_at_runtime）。
+_PANDA_ACTION_CONFIG = {k: {"normalization": None} for k in _PANDA_ACTION_KEYS}
 
 # ---------------------------------------------------------------------------
 # humanoid 组：绝对位姿 + rot_6d
@@ -62,6 +68,7 @@ _HUMANOID_ACTION_KEYS = [
     "right_abs_pos", "right_abs_rot_6d", "left_abs_pos", "left_abs_rot_6d",
     "right_gripper", "left_gripper",
 ]
+_HUMANOID_ACTION_CONFIG = {k: {"normalization": None} for k in _HUMANOID_ACTION_KEYS}
 
 DATASET_CONFIGS: Dict[str, DatasetConfig] = {
     "two_arm_box_cleanup.hdf5": {
@@ -71,6 +78,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": True,
         "low_dim_keys": _PANDA_LOW_DIM,
         "action_keys": _PANDA_ACTION_KEYS,
+        "action_config": _PANDA_ACTION_CONFIG,
         "lang": "move the box lid onto the box",
     },
     "two_arm_lift_tray.hdf5": {
@@ -80,6 +88,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": True,
         "low_dim_keys": _PANDA_LOW_DIM,
         "action_keys": _PANDA_ACTION_KEYS,
+        "action_config": _PANDA_ACTION_CONFIG,
         "lang": "put the two objects in the tray and then lift the tray",
     },
     "two_arm_drawer_cleanup.hdf5": {
@@ -89,6 +98,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": True,
         "low_dim_keys": _PANDA_LOW_DIM,
         "action_keys": _PANDA_ACTION_KEYS,
+        "action_config": _PANDA_ACTION_CONFIG,
         "lang": "pick the cup and open the drawer, then put the cup in the drawer and close the drawer",
     },
     "two_arm_pouring.hdf5": {
@@ -98,6 +108,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": True,
         "low_dim_keys": _HUMANOID_LOW_DIM,
         "action_keys": _HUMANOID_ACTION_KEYS,
+        "action_config": _HUMANOID_ACTION_CONFIG,
         "lang": "pick the cup and open the drawer, then put the cup in the drawer and close the drawer",
     },
     "two_arm_coffee.hdf5": {
@@ -107,6 +118,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": True,
         "low_dim_keys": _HUMANOID_LOW_DIM,
         "action_keys": _HUMANOID_ACTION_KEYS,
+        "action_config": _HUMANOID_ACTION_CONFIG,
         "lang": "insert the coffee pod into the coffee machine and close the lid",
     },
     "two_arm_can_sort_random.hdf5": {
@@ -117,6 +129,7 @@ DATASET_CONFIGS: Dict[str, DatasetConfig] = {
         "has_cam_high": False,  # 六个数据集里唯一真的缺 cam_high 的
         "low_dim_keys": _HUMANOID_LOW_DIM,
         "action_keys": _HUMANOID_ACTION_KEYS,
+        "action_config": _HUMANOID_ACTION_CONFIG,
         "lang": "pick the can and put it in the box",
     },
 }
