@@ -213,8 +213,8 @@
   },
   "metadata": {
     "num_samples": 1000,
-    "state_dim": 24,
-    "action_dim": 24,
+    "state_dim": 42,
+    "action_dim": 42,
     "failed_samples": 0,
     "timestamp": "2026-08-04T22:15:10.228028"
   }

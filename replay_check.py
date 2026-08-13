@@ -37,7 +37,7 @@ STATS_FILE          = "/home/ubuntu/myh/experiment/Dexora/lerobot_data/new_lerob
 DATASET_TYPE       = "finetune"   # <-- 对照 --dataset_type 确认
 LOAD_FROM           = "lerobot"    # <-- 对照 --load_from 确认
 PRECOMP_LANG_EMBED  = False        # <-- 对照 --precomp_lang_embed 确认
-STATE_DIM_KEEP       = 24          # <-- ⚠️ 重点确认：训练时 --state_dim_keep 到底传的是多少
+STATE_DIM_KEEP       = 42          # <-- ⚠️ 重点确认：训练时 --state_dim_keep 到底传的是多少
 # ============================================================
 
 DEVICE = "cuda"

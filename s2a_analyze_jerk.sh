@@ -19,7 +19,7 @@ set -Eeuo pipefail
 : "${TARGET_RATIO:=0.2}"             # paper: 20% per axis -> ~18% retained
 : "${SPRE_DIR:=runs/spre}"
 : "${FPS:=20}"                       # paper §III-A logs at 20 Hz
-: "${STATE_DIM_KEEP:=24}"
+: "${STATE_DIM_KEEP:=42}"
 
 # Auto-generate stats if missing.
 if [[ ! -f "$DEXORA_STATS" ]]; then

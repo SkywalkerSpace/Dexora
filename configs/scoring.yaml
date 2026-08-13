@@ -6,7 +6,7 @@ common:
   # The number of cameras to be used in the model
   num_cameras: 4
   # Dimension for state/action, we use the same space for both state and action
-  state_dim: 24
+  state_dim: 42
 
 dataset:
   # The path to the buffer (at least 400GB)
@@ -35,7 +35,7 @@ model:
   lang_token_dim: 1024
   img_token_dim: 1152
   # Dim of action or proprioception vector
-  state_token_dim: 24
+  state_token_dim: 42
   
   # Config for scoring model
   scoring:

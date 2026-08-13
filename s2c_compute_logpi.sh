@@ -19,7 +19,7 @@ set -Eeuo pipefail
 : "${NUM_NOISE_STEPS:=4}"
 : "${FRAME_STRIDE:=10}"
 : "${MAX_EPISODES:=-1}"              # -1 = all
-: "${STATE_DIM_KEEP:=24}"
+: "${STATE_DIM_KEEP:=42}"
 : "${CUDA_VISIBLE_DEVICES:=0}"
 
 export CUDA_VISIBLE_DEVICES

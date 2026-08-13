@@ -8,7 +8,7 @@ common:
   action_chunk_size: 32           # L = 32, matching paper
   num_cameras: 4
   num_patches_per_view: 729        # 27 x 27 for SigLip-SO400M @ 384x384
-  state_dim: 24                    # # 6(右臂) + 6(左臂) + 6(右手) + 6(左手) = 24 DoF
+  state_dim: 42                    # # 6(右臂) + 6(左臂) + 6(右手) + 6(左手) = 42 DoF
 
 dataset:
   buf_path: /path/to/buffer
@@ -25,7 +25,7 @@ model:
   state_adaptor: mlp3x_gelu
   lang_token_dim: 1024             # T5-large
   img_token_dim: 1152              # SigLip-SO400M
-  state_token_dim: 24
+  state_token_dim: 42
   rdt:
     # 400M: hidden_size=1024, depth=28, num_heads=16  (paper §IV-A)
     hidden_size: 1024
