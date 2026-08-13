@@ -31,6 +31,29 @@ from dexmg.dexmg_config import DATASET_CONFIGS, DatasetConfig
 from dexmg.dexmg_convert import build_unified_action, build_unified_state
 from dexmg.dexmg_schema import Schema, build_schema
 
+import robomimic.utils.obs_utils as ObsUtils
+from dexmg.dexmg_config import DATASET_CONFIGS
+
+_obs_utils_initialized = False
+
+def _ensure_obs_utils_initialized():
+    global _obs_utils_initialized
+    if _obs_utils_initialized:
+        return
+    low_dim_keys = set()
+    rgb_keys = set()
+    for cfg in DATASET_CONFIGS.values():
+        low_dim_keys.update(cfg["low_dim_keys"])
+        rgb_keys.update(cfg["image_keys"])
+    ObsUtils.initialize_obs_utils_with_obs_specs({
+        "obs": {
+            "low_dim": sorted(low_dim_keys),
+            "rgb": sorted(rgb_keys),
+        }
+    })
+    _obs_utils_initialized = True
+
+_ensure_obs_utils_initialized()
 
 class _SingleDexmgReader:
     def __init__(
