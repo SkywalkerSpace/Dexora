@@ -55,7 +55,16 @@ _PANDA_ACTION_KEYS = [
 # normalization 统一设为 None —— 归一化/格式转换已经在 dexmg_convert.py / dexmg_rotation.py /
 # compute_dexmg_stats.py 里自己离线做了，这里只让 robomimic 老实读出原始值，不要让它做
 # 二次归一化或运行时格式转换（不设 format / convert_at_runtime）。
-_PANDA_ACTION_CONFIG = {k: {"normalization": None} for k in _PANDA_ACTION_KEYS}
+# normalization 从 None 改为 "min_max"：robomimic 规定 action_config 里
+# normalization=None 意味着"数据本来就已经在 [-1,1] 范围内"，并且真的会在
+# action_stats_to_normalization_stats() 里 assert 原始 min/max <= 1+1e-5 来校验这个假设。
+# 我们这里的原始动作分量（比如 right_gripper 里那个固定的 ~1.5708 弧度值、
+# 绝对位姿的米制坐标）并不在 [-1,1] 内，所以必须显式让 robomimic 自己做 min_max 缩放。
+# 注意：这里只是让 robomimic 内部那次“顺带触发”的归一化统计计算不崩溃 ——
+# _SingleDexmgReader.get_item() 根本没用 self._seq_ds.get_item() 返回的 raw["actions"]，
+# 真正喂给模型的 unified_action 是 _read_action_dict()/dexmg_convert.py 用自己的
+# compute_dexmg_stats.py 统计量单独算的，两边互不影响。
+_PANDA_ACTION_CONFIG = {k: {"normalization": "min_max"} for k in _PANDA_ACTION_KEYS}
 
 # ---------------------------------------------------------------------------
 # humanoid 组：绝对位姿 + rot_6d
@@ -68,7 +77,7 @@ _HUMANOID_ACTION_KEYS = [
     "right_abs_pos", "right_abs_rot_6d", "left_abs_pos", "left_abs_rot_6d",
     "right_gripper", "left_gripper",
 ]
-_HUMANOID_ACTION_CONFIG = {k: {"normalization": None} for k in _HUMANOID_ACTION_KEYS}
+_HUMANOID_ACTION_CONFIG = {k: {"normalization": "min_max"} for k in _HUMANOID_ACTION_KEYS}
 
 DATASET_CONFIGS: Dict[str, DatasetConfig] = {
     "two_arm_box_cleanup.hdf5": {
