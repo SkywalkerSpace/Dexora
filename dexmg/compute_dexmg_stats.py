@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-compute_dexmg_stats.py (第二次重写 —— action 分量直接读 action_dict/{key})
+compute_dexmg_stats.py (第三次重写 —— 适配单一 schema.dim)
 
-上一版的 bug 就出在这个文件：用一张写死的 {key: dim} 表去切分 flat
-"actions" 向量，humanoid 组的 gripper 实际宽度和表里的假设不一致，
-切出界后 numpy 静默返回空数组。这版改成直接读 hdf5 里已经存好的
-data/{demo}/action_dict/{key}，宽度是多少读出来就是多少。
+state 和 action 现在共用同一个维度 M（对齐 Dexora RDTRunner 的
+action_dim=config["common"]["state_dim"] 约束），但统计量依然要分开
+算：
+    - state 和 action 数值语义不同，不能共用一份统计量
+    - 同一侧（state 或 action）里，panda 组和 humanoid 组数值语义也
+      不同（相对位移 vs 绝对位置），也不能混
 
 用法：
     python compute_dexmg_stats.py \
-        --dataset_root /path/to/dexmimicgen/datasets/generated \
+        --dataset_root /path/to/dexmimicgen/datasets \
         --out_dir configs/
 """
 
@@ -42,6 +44,7 @@ def _stats_from_stack(x: np.ndarray, valid_mask: np.ndarray) -> dict:
     D = x.shape[-1]
     mean = np.zeros(D, dtype=np.float64)
     std = np.ones(D, dtype=np.float64)
+    norm = np.ones(D, dtype=np.float64)  # RMS，不等于 std，单独算
     mn = np.zeros(D, dtype=np.float64)
     mx = np.zeros(D, dtype=np.float64)
     q01 = np.zeros(D, dtype=np.float64)
@@ -51,13 +54,15 @@ def _stats_from_stack(x: np.ndarray, valid_mask: np.ndarray) -> dict:
     xv = x[:, valid_dims]
     mean[valid_dims] = xv.mean(axis=0)
     std[valid_dims] = xv.std(axis=0) + 1e-6
+    # RMS = sqrt(mean(x^2))，源码里 state_norm 就是这么算的，不是 std 的别名
+    norm[valid_dims] = np.sqrt(np.mean(xv ** 2, axis=0)) + 1e-6
     mn[valid_dims] = xv.min(axis=0)
     mx[valid_dims] = xv.max(axis=0)
     q01[valid_dims] = np.quantile(xv, 0.01, axis=0)
     q99[valid_dims] = np.quantile(xv, 0.99, axis=0)
 
     return {
-        "mean": mean.tolist(), "std": std.tolist(),
+        "mean": mean.tolist(), "std": std.tolist(), "norm": norm.tolist(),
         "min": mn.tolist(), "max": mx.tolist(),
         "q01": q01.tolist(), "q99": q99.tolist(),
     }
@@ -83,8 +88,8 @@ def main(dataset_root: str, out_dir: str):
         for obs, action_dict in _iter_demo_low_dim_and_actions(hdf5_path, cfg):
             unified_state, _ = build_unified_state(obs, cfg, schema)
             unified_action, _ = build_unified_action(action_dict, cfg, schema)
-            group_states[group].append(unified_state.reshape(-1, schema.state.dim))
-            group_actions[group].append(unified_action.reshape(-1, schema.action.dim))
+            group_states[group].append(unified_state.reshape(-1, schema.dim))
+            group_actions[group].append(unified_action.reshape(-1, schema.dim))
 
     group_state_stats = {}
     group_action_stats = {}
@@ -92,8 +97,8 @@ def main(dataset_root: str, out_dir: str):
         states = np.concatenate(group_states[group], axis=0)
         actions = np.concatenate(group_actions[group], axis=0)
 
-        s_mask = schema.state.group_mask(group)
-        a_mask = schema.action.group_mask(group)
+        s_mask = schema.state_group_mask(group)
+        a_mask = schema.action_group_mask(group)
         group_state_stats[group] = _stats_from_stack(states, s_mask)
         group_action_stats[group] = _stats_from_stack(actions, a_mask)
         print(f"[stats] group={group}: {states.shape[0]} frames")
@@ -121,7 +126,7 @@ def main(dataset_root: str, out_dir: str):
         stat_ours[dataset_name] = {
             "state_mean": group_state_stats[group]["mean"],
             "state_std": group_state_stats[group]["std"],
-            "state_norm": group_state_stats[group]["std"],
+            "state_norm": group_state_stats[group]["norm"],  # RMS，不是 std
         }
     with open(stat_ours_path, "w") as f:
         json.dump(stat_ours, f, indent=2)

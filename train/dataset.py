@@ -174,10 +174,25 @@ class VLAConsumerDataset(Dataset):
         elif use_hdf5 == "egodex":
             from data.egodex_vla_dataset import EgoDexVLADataset  # noqa: F401
             self.hdf5_dataset = EgoDexVLADataset()
+        elif use_hdf5 == "dexmg_hdf5":
+            from dexmg.dexmg_hdf5_vla_dataset import DexmgHDF5VLADataset
+            self.hdf5_dataset = DexmgHDF5VLADataset(
+                dataset_root="/mnt/2t/myh/experiment/checkpoints",
+                stats_file="configs/dataset_statistics.json",
+                filter_keys={
+                    "two_arm_box_cleanup.hdf5": "1000_demos",
+                    "two_arm_drawer_cleanup.hdf5": "1000_demos",
+                    "two_arm_lift_tray.hdf5": "1000_demos",
+                    "two_arm_can_sort_random.hdf5": "1000_demos",
+                    "two_arm_pouring.hdf5": "1000_demos",
+                    "two_arm_coffee.hdf5": "1000_demos",
+                },
+                schema_cache_dir="configs/",
+            )
         else:
             raise ValueError(
                 f"Unknown dataset backend {use_hdf5!r}. "
-                "Expected one of {'lerobot', 'bson', 'hdf5', 'egodex'}."
+                "Expected one of {'lerobot', 'bson', 'hdf5', 'egodex', 'dexmg_hdf5'}."
             )
         self.use_precomp_lang_embed = use_precomp_lang_embed
         if use_precomp_lang_embed:

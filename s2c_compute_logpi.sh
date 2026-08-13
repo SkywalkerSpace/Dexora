@@ -34,7 +34,7 @@ python scripts/compute_logpi.py \
     --config_path="$CONFIG_PATH" \
     --model_path="$STAGE1_CKPT" \
     --dataset_path="$DEXORA_LEROBOT_ROOT" \
-    --load_from=lerobot \
+    --load_from=dexmg_hdf5 \
     --stats_file="$DEXORA_STATS" \
     --state_dim_keep="$STATE_DIM_KEEP" \
     --output_file="$LOGPI_FILE" \

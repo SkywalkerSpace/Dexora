@@ -1,38 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-dexmg_hdf5_vla_dataset.py (第二次重写 —— action 分量直接读 action_dict/{key}，不猜维度)
+dexmg_hdf5_vla_dataset.py (第三次重写 —— state_dim == action_dim == schema.dim)
 
-Dexora 的新数据后端：直接从 dexmimicgen 原始 hdf5 读取，不经过 LeRobot
-转换。对接 Dexora-dataset.py 里 VLAConsumerDataset 的 use_hdf5 分支：
+对接 Dexora-dataset.py 的 VLAConsumerDataset:
 
     elif use_hdf5 == "dexmg_hdf5":
         from data.dexmg_hdf5_vla_dataset import DexmgHDF5VLADataset
         self.hdf5_dataset = DexmgHDF5VLADataset(...)
 
-契约（VLAConsumerDataset.__getitem__ 里用到的字段）：
-    __len__()
-    get_item() -> {
-        "meta": {"dataset_name": str, "instruction": str},
-        "state": np.ndarray [T, STATE_DIM],
-        "actions": np.ndarray [T, ACTION_DIM],
-        "state_indicator": np.ndarray [STATE_DIM],
-        "action_mask": np.ndarray [ACTION_DIM],
-        "cam_high": [T,H,W,C] uint8, "cam_high_mask": [T] bool,
-        "cam_right_wrist": ..., "cam_right_wrist_mask": ...,
-        "cam_left_wrist": ..., "cam_left_wrist_mask": ...,
-        "cam_third_view": ..., "cam_third_view_mask": ...,
-        "state_std": [STATE_DIM], "state_mean": [STATE_DIM], "state_norm": [STATE_DIM],
-    }
-
-关键设计：action 的每个分量（right_gripper 等）直接从
-data/{demo}/action_dict/{key} 按 frame_indices 读取，宽度是多少就是
-多少，不用任何静态维度表——上一版在这里假设 gripper 恒为6维，在
-humanoid 数据集上炸了。
-
-依赖 robomimic（pip install -e libs/robomimic），复用它的
-SequenceDataset 做 obs 的 hdf5 缓存/帧堆叠/滑窗/demo过滤；action 不
-走 robomimic 的 action_keys 机制，自己直接读 action_dict，避免依赖
-robomimic 内部"action_keys 必须带 action_dict/ 前缀"这类约定。
+get_item() 契约同前几版，唯一变化是 state/actions 现在共用同一个维度
+M = self.state_dim = self.action_dim = schema.dim（因为 Dexora 实例化
+RDTRunner 时用 action_dim=config["common"]["state_dim"]，两者天生是
+同一个数字）。
 """
 
 from __future__ import annotations
@@ -54,9 +33,6 @@ from dexmg_schema import Schema, build_schema
 
 
 class _SingleDexmgReader:
-    """包装单个 hdf5 文件：robomimic SequenceDataset 管 obs 的滑窗/缓存，
-    action 和图像自己按 frame_indices 直接读 hdf5。"""
-
     def __init__(
         self,
         hdf5_path: str,
@@ -76,10 +52,7 @@ class _SingleDexmgReader:
         self._seq_ds = SequenceDataset(
             hdf5_path=hdf5_path,
             obs_keys=cfg["low_dim_keys"],
-            # robomimic 内部索引结构依赖至少有一个 dataset_key，这里留着
-            # "actions" 只是为了让 SequenceDataset 正常工作，返回值里的
-            # raw["actions"] 我们不用（自己直接读 action_dict/{key}）。
-            dataset_keys=["actions"],
+            dataset_keys=["actions"],  # 只用来让 robomimic 内部索引结构正常工作，值不使用
             load_next_obs=False,
             frame_stack=frame_stack,
             seq_length=seq_length,
@@ -119,18 +92,15 @@ class _SingleDexmgReader:
         return demo_id, frame_indices
 
     def _read_action_dict(self, demo_id: str, frame_indices: np.ndarray) -> Dict[str, np.ndarray]:
-        """直接从 data/{demo}/action_dict/{key} 按 frame_indices 取值，
-        每个 key 的宽度就是 hdf5 里的真实宽度，不假设。"""
         out = {}
         needed_keys = set(self.cfg["action_keys"]) | {"right_gripper", "left_gripper"}
         grp = self._h5file[f"data/{demo_id}/action_dict"]
         for key in needed_keys:
-            arr = grp[key][frame_indices]  # (T, W_real)
-            out[key] = arr
+            out[key] = grp[key][frame_indices]
         return out
 
     def get_item(self, index: int) -> dict:
-        raw = self._seq_ds.get_item(index)  # {"obs": {...}}
+        raw = self._seq_ds.get_item(index)
         demo_id, frame_indices = self._frame_indices_for(index)
 
         unified_state, state_mask = build_unified_state(raw["obs"], self.cfg, self.schema)
@@ -158,8 +128,6 @@ class _SingleDexmgReader:
 
 
 class DexmgHDF5VLADataset:
-    """多个 dexmimicgen hdf5 文件的加权混合，供 Dexora VLAConsumerDataset 使用。"""
-
     def __init__(
         self,
         dataset_root: str,
@@ -177,8 +145,10 @@ class DexmgHDF5VLADataset:
         schema_cache_dir = schema_cache_dir or dataset_root
 
         self.schema = build_schema(dataset_root=dataset_root, cache_dir=schema_cache_dir)
-        self.state_dim = self.schema.state.dim
-        self.action_dim = self.schema.action.dim
+        # state_dim 和 action_dim 是同一个数字 M，对齐 Dexora RDTRunner 的
+        # action_dim=config["common"]["state_dim"] 约束
+        self.state_dim = self.schema.dim
+        self.action_dim = self.schema.dim
 
         self._readers: List[_SingleDexmgReader] = []
         self._weights: List[float] = []

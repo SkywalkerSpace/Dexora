@@ -12,12 +12,19 @@
 | `dexmg_hdf5_vla_dataset.py` | 真正的 Dataset 类 `DexmgHDF5VLADataset`，满足 Dexora `VLAConsumerDataset` 要求的 `get_item()`/`__len__()` 契约 |
 | `compute_dexmg_stats.py` | 训练前离线跑一次的统计量脚本；槽位共享但数值语义不同，**统计量依然按 group 分别算** |
 
-## 维度（不再是写死的常量，两侧 gripper 宽度都探测出来）
+## 维度（state_dim 强制等于 action_dim，因为 Dexora 的实例化代码就是这么用的）
 
-- `right_arm_pos(3) / right_arm_rot6d(6) / right_gripper(探测) / left_arm_pos(3) / left_arm_rot6d(6) / left_gripper(探测)`，state 和 action 分别探测、分别缓存（同名槽位但物理含义不同，不能共用同一份探测结果）。
-- **上一版的 bug**：曾经假设两组的 `right_gripper`/`left_gripper` 都是 6 维（从 panda 组的数据打印抄的），humanoid 组实际宽度不一样，直接崩了。现在改成直接读 `data/{demo}/action_dict/{key}` 的真实 shape，不再假设任何维度数字。
-- gripper 槽位宽度 = 两组里较大的真实宽度，较窄那组自动 padding 补 0 + mask=0。`mask` 现在两侧（state/action）都可能不是全 1 了（取决于两组 gripper 宽度是否一致）。
-- 旋转格式：quaternion（state）/axis-angle（panda action）都转成 6D；rel vs abs 语义差异不占维度，靠各自数据集独立的归一化统计量 + RDT 的 dataset/instruction conditioning 隐式区分。
+**重要约束**：Dexora 实际训练脚本里 `RDTRunner(action_dim=config["common"]["state_dim"], ...)`——`action_dim` 和 `state_dim` 天生是同一个数字 M，不是两个独立维度。这版把 gripper 槽位宽度改成**四个探测结果（state×2组 + action×2组）里的最大值**，state 和 action 强制共用同一套槽位布局：
+
+```
+right_arm_pos(3) / right_arm_rot6d(6) / right_gripper(探测最大值) /
+left_arm_pos(3)  / left_arm_rot6d(6)  / left_gripper(探测最大值)
+```
+
+以你们实际数据为例：state 侧 gripper 真实宽度 panda=12/humanoid=11（GR1/fourier 手 raw qpos 11维），action 侧 gripper 真实宽度两组都是 6 —— 取四者最大值 12，`M = 3+6+12+3+6+12 = 42`。也就是说 **action 侧原本只有 6 维真实数据，会 padding 到 12 维**，多出来的 6 维在 `action_mask` 里标为 0（跑 mock 数据验证过：panda 组 `action_mask` 有效维度 30/42，humanoid 组 `state_mask` 有效维度 40/42，符合预期）。
+
+- `dim`：单一的 M，`DexmgHDF5VLADataset.state_dim == .action_dim == schema.dim`
+- **旋转格式**：quaternion（state）/axis-angle（panda action）都转成 6D；rel vs abs 语义差异不占维度，靠各自数据集独立的归一化统计量 + RDT 的 dataset/instruction conditioning 隐式区分。
 
 ## 使用步骤
 
@@ -52,7 +59,7 @@
 
    然后训练时用 `use_hdf5="dexmg_hdf5"` 启动即可。
 
-3. **模型侧**：`RDTRunner` 的 `state_dim`/`action_dim` 改成 `DexmgHDF5VLADataset.state_dim`/`.action_dim`（跑一遍 `compute_dexmg_stats.py` 或实例化一次 dataset 就能拿到实际数字，不用手算）。
+3. **模型侧**：实例化 `DexmgHDF5VLADataset` 后用 `.state_dim`（等于 `.action_dim`）填 `config["common"]["state_dim"]` 和 `config["model"]["state_token_dim"]`，`RDTRunner` 构造时 `action_dim=config["common"]["state_dim"]` 这行不用改，两者本来就该是同一个数。
 4. **`compute_loss` 调用处**：把 `_SingleDexmgReader.get_item()` 里新增的 `action_mask` 字段传给 `RDTRunner.compute_loss(..., action_mask=...)`（现有代码大概率已经在传某种 action_mask，确认一下是不是直接复用这个字段，还是需要在 collator 里再包一层）。
 
 ## 待你核实/决定的点（代码里都留了标记）

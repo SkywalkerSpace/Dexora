@@ -1,26 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-dexmg_schema.py (第二次重写 —— state 和 action 的 gripper 宽度都探测，不假设)
+dexmg_schema.py (第三次重写 —— state/action 强制共用同一个 M)
 
-上一版的 bug：action 侧的 right_gripper/left_gripper 宽度硬编码成 6
-（从 panda 组的数据打印抄的），humanoid 组实际宽度不一样，直接崩了。
+关键约束（来自 Dexora 实际训练代码）：
+    RDTRunner(action_dim=config["common"]["state_dim"], ...)
+即 state_dim 和 action_dim 天生是同一个数字 M，不是两个独立维度。
+之前的版本让 state(42) / action(30) 各自探测、各自不同，跟这个约束
+不兼容。
 
-教训：只要是"某个 embodiment 的某个 key 到底几维"这种问题，一律不
-猜、不抄别处打印出来的数字，统一走"探测 hdf5 实际 shape"这条路——
-state 侧的 gripper_qpos 之前就是这么做的，这版把 action 侧的
-right_gripper/left_gripper 也纳入同一套探测机制。
-
-槽位（state 和 action 现在共用同一份 Schema 对象，一次探测、一次缓存）：
-    right_arm_pos     (3，固定)
-    right_arm_rot6d   (6，固定，两侧旋转统一转成6D后写入)
-    right_gripper     (探测得到，= 两组里较大的真实宽度)
-    left_arm_pos      (3，固定)
-    left_arm_rot6d    (6，固定)
-    left_gripper       (探测得到)
-
-state 和 action 各自维护一份独立的宽度探测结果（同名槽位，但
-state 的 gripper_qpos 宽度和 action 的 gripper 控制量宽度不是同一
-个东西，不能混用同一个探测结果）。
+这版把 gripper 槽位宽度改成"state 和 action、panda 和 humanoid，一共
+4 个探测结果里取最大值"，state 和 action 强制使用同一套 slots 布局
+（同样的 offset/dim）。已知的 4 个探测结果：
+    state  panda    right/left gripper: 12
+    state  humanoid right/left gripper: 11 (GR1/fourier hand raw qpos)
+    action panda    right/left gripper: 6
+    action humanoid right/left gripper: 6
+取 max -> gripper 槽位宽度 = 12，M = 3+6+12+3+6+12 = 42
+（正好等于之前 state 侧探测出来的 42，因为 state 侧本来就比 action
+宽；action 侧那 6 维会 padding 到 12，多出来的 6 维 mask=0）。
 """
 
 from __future__ import annotations
@@ -39,10 +36,6 @@ from dexmg_config import DATASET_CONFIGS, list_hdf5_by_group
 _SCHEMA_CACHE_FILENAME = "dexmg_unified_schema_cache.json"
 
 GROUPS = ("panda", "humanoid")
-SLOT_NAMES_FIXED = [  # (name, dim) —— 这几个宽度是设计上固定的，不用探测
-    ("right_arm_pos", 3), ("right_arm_rot6d", 6),
-    ("left_arm_pos", 3), ("left_arm_rot6d", 6),
-]
 GRIPPER_SLOT_NAMES = ["right_gripper", "left_gripper"]
 
 
@@ -54,31 +47,31 @@ class SharedSlot:
 
 
 @dataclass
-class SubSchema:
-    """state 或 action 各自的一份槽位表 + gripper 真实宽度记录。"""
+class Schema:
+    dim: int  # M —— state 和 action 共用同一个数字
     slots: "OrderedDict[str, SharedSlot]"
-    dim: int
-    # {group: {"right_gripper": real_width, "left_gripper": real_width}}
-    group_gripper_real_width: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    # 分别记录 state / action 在每个 group 下 gripper 槽位的真实宽度
+    # （槽位宽度是共享的，但实际数据宽度不同：state 是 11/12，action 是 6/6）
+    state_real_width: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    action_real_width: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
-    def group_mask(self, group: str) -> np.ndarray:
+    def _group_mask(self, real_width_table: Dict[str, Dict[str, int]], group: str) -> np.ndarray:
         mask = np.ones(self.dim, dtype=np.float32)
         for gripper_name in GRIPPER_SLOT_NAMES:
             slot = self.slots[gripper_name]
-            real_w = self.group_gripper_real_width[group][gripper_name]
+            real_w = real_width_table[group][gripper_name]
             if real_w < slot.dim:
                 mask[slot.offset + real_w: slot.offset + slot.dim] = 0.0
         return mask
 
+    def state_group_mask(self, group: str) -> np.ndarray:
+        return self._group_mask(self.state_real_width, group)
 
-@dataclass
-class Schema:
-    state: SubSchema
-    action: SubSchema
+    def action_group_mask(self, group: str) -> np.ndarray:
+        return self._group_mask(self.action_real_width, group)
 
 
 def _low_dim_key_roles(cfg) -> Dict[str, Dict[str, str]]:
-    """返回 {"right": {"pos": key, "quat": key, "gripper": key}, "left": {...}}"""
     keys = cfg["low_dim_keys"]
     roles: Dict[str, Dict[str, str]] = {"right": {}, "left": {}}
     for k in keys:
@@ -105,59 +98,31 @@ def _probe_obs_width(h5file: h5py.File, demo0: str, key: str) -> int:
 
 
 def _probe_action_dict_width(h5file: h5py.File, demo0: str, key: str) -> int:
-    """action 分量存在 data/{demo}/action_dict/{key} 下，直接读真实 shape。"""
     ds_path = f"data/{demo0}/action_dict/{key}"
-    assert ds_path in h5file, (
-        f"{ds_path} 不存在，检查这个 hdf5 的 action_dict 分组结构是否和预期一致"
-    )
+    assert ds_path in h5file, f"{ds_path} 不存在，检查 action_dict 分组结构"
     shape = h5file[ds_path].shape
     return int(shape[1]) if len(shape) > 1 else 1
 
 
-def _build_sub_schema(
-    dataset_root: str,
-    fixed_names: List[tuple],
-    probe_gripper_width_fn,
-) -> SubSchema:
-    group_gripper_width: Dict[str, Dict[str, int]] = {}
+def _probe_group_widths(dataset_root: str) -> Dict[str, Dict[str, Dict[str, int]]]:
+    """返回 {"state": {group: {"right_gripper": w, "left_gripper": w}}, "action": {...}}"""
+    out = {"state": {}, "action": {}}
     for group in GROUPS:
         hdf5_names = list_hdf5_by_group(group)
         cfg0 = DATASET_CONFIGS[hdf5_names[0]]
         probe_path = os.path.join(dataset_root, hdf5_names[0])
+        roles = _low_dim_key_roles(cfg0)
         with h5py.File(probe_path, "r") as f:
             demo0 = next(iter(f["data"].keys()))
-            widths = probe_gripper_width_fn(f, demo0, cfg0)
-        group_gripper_width[group] = widths
-
-    right_gripper_dim = max(w["right_gripper"] for w in group_gripper_width.values())
-    left_gripper_dim = max(w["left_gripper"] for w in group_gripper_width.values())
-
-    slots: "OrderedDict[str, SharedSlot]" = OrderedDict()
-    offset = 0
-    ordered = [
-        ("right_arm_pos", 3), ("right_arm_rot6d", 6), ("right_gripper", right_gripper_dim),
-        ("left_arm_pos", 3), ("left_arm_rot6d", 6), ("left_gripper", left_gripper_dim),
-    ]
-    for name, dim in ordered:
-        slots[name] = SharedSlot(name, offset, dim)
-        offset += dim
-
-    return SubSchema(slots=slots, dim=offset, group_gripper_real_width=group_gripper_width)
-
-
-def _state_gripper_probe(f: h5py.File, demo0: str, cfg) -> Dict[str, int]:
-    roles = _low_dim_key_roles(cfg)
-    return {
-        "right_gripper": _probe_obs_width(f, demo0, roles["right"]["gripper"]),
-        "left_gripper": _probe_obs_width(f, demo0, roles["left"]["gripper"]),
-    }
-
-
-def _action_gripper_probe(f: h5py.File, demo0: str, cfg) -> Dict[str, int]:
-    return {
-        "right_gripper": _probe_action_dict_width(f, demo0, "right_gripper"),
-        "left_gripper": _probe_action_dict_width(f, demo0, "left_gripper"),
-    }
+            out["state"][group] = {
+                "right_gripper": _probe_obs_width(f, demo0, roles["right"]["gripper"]),
+                "left_gripper": _probe_obs_width(f, demo0, roles["left"]["gripper"]),
+            }
+            out["action"][group] = {
+                "right_gripper": _probe_action_dict_width(f, demo0, "right_gripper"),
+                "left_gripper": _probe_action_dict_width(f, demo0, "left_gripper"),
+            }
+    return out
 
 
 def build_schema(dataset_root: str, cache_dir: str, force_recompute: bool = False) -> Schema:
@@ -167,25 +132,50 @@ def build_schema(dataset_root: str, cache_dir: str, force_recompute: bool = Fals
     if os.path.exists(cache_path) and not force_recompute:
         with open(cache_path, "r") as f:
             cached = json.load(f)
+        slots = OrderedDict((n, SharedSlot(**s)) for n, s in cached["slots"].items())
+        return Schema(
+            dim=cached["dim"], slots=slots,
+            state_real_width=cached["state_real_width"],
+            action_real_width=cached["action_real_width"],
+        )
 
-        def _load(sub):
-            slots = OrderedDict((n, SharedSlot(**s)) for n, s in sub["slots"].items())
-            return SubSchema(slots=slots, dim=sub["dim"],
-                              group_gripper_real_width=sub["group_gripper_real_width"])
+    widths = _probe_group_widths(dataset_root)  # {"state":{...}, "action":{...}}
 
-        return Schema(state=_load(cached["state"]), action=_load(cached["action"]))
+    # 每一侧(right/left)的槽位宽度 = state/action、panda/humanoid 四个探测值里的最大值
+    def _max_over_all(gripper_name: str) -> int:
+        candidates = [
+            widths["state"]["panda"][gripper_name],
+            widths["state"]["humanoid"][gripper_name],
+            widths["action"]["panda"][gripper_name],
+            widths["action"]["humanoid"][gripper_name],
+        ]
+        return max(candidates)
 
-    state_schema = _build_sub_schema(dataset_root, SLOT_NAMES_FIXED, _state_gripper_probe)
-    action_schema = _build_sub_schema(dataset_root, SLOT_NAMES_FIXED, _action_gripper_probe)
-    schema = Schema(state=state_schema, action=action_schema)
+    right_gripper_dim = _max_over_all("right_gripper")
+    left_gripper_dim = _max_over_all("left_gripper")
 
-    def _dump(sub: SubSchema):
-        return {
-            "dim": sub.dim,
-            "slots": {n: s.__dict__ for n, s in sub.slots.items()},
-            "group_gripper_real_width": sub.group_gripper_real_width,
-        }
+    slots: "OrderedDict[str, SharedSlot]" = OrderedDict()
+    offset = 0
+    for name, dim in [
+        ("right_arm_pos", 3), ("right_arm_rot6d", 6), ("right_gripper", right_gripper_dim),
+        ("left_arm_pos", 3), ("left_arm_rot6d", 6), ("left_gripper", left_gripper_dim),
+    ]:
+        slots[name] = SharedSlot(name, offset, dim)
+        offset += dim
+
+    schema = Schema(
+        dim=offset, slots=slots,
+        state_real_width=widths["state"], action_real_width=widths["action"],
+    )
 
     with open(cache_path, "w") as f:
-        json.dump({"state": _dump(state_schema), "action": _dump(action_schema)}, f, indent=2)
+        json.dump(
+            {
+                "dim": schema.dim,
+                "slots": {n: s.__dict__ for n, s in slots.items()},
+                "state_real_width": widths["state"],
+                "action_real_width": widths["action"],
+            },
+            f, indent=2,
+        )
     return schema
