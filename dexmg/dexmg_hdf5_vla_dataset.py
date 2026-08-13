@@ -26,10 +26,10 @@ import numpy as np
 
 from robomimic.utils.dataset import SequenceDataset
 
-from dexmg_camera import build_camera_key_map, extract_camera_images
-from dexmg_config import DATASET_CONFIGS, DatasetConfig
-from dexmg_convert import build_unified_action, build_unified_state
-from dexmg_schema import Schema, build_schema
+from dexmg.dexmg_camera import build_camera_key_map, extract_camera_images
+from dexmg.dexmg_config import DATASET_CONFIGS, DatasetConfig
+from dexmg.dexmg_convert import build_unified_action, build_unified_state
+from dexmg.dexmg_schema import Schema, build_schema
 
 
 class _SingleDexmgReader:

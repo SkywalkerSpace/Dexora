@@ -9,9 +9,9 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from dexmg_config import DatasetConfig
-from dexmg_rotation import axis_angle_to_rot6d, quat_to_rot6d
-from dexmg_schema import Schema, _low_dim_key_roles
+from dexmg.dexmg_config import DatasetConfig
+from dexmg.dexmg_rotation import axis_angle_to_rot6d, quat_to_rot6d
+from dexmg.dexmg_schema import Schema, _low_dim_key_roles
 
 
 def _place_into(unified: np.ndarray, schema: Schema, name: str, value: np.ndarray):

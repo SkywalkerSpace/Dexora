@@ -73,11 +73,11 @@ from robosuite.utils.transform_utils import quat2axisangle  # noqa: F401  (未�
 
 import dexmimicgen  # noqa: F401  必须 import 才能把自定义环境注册到 robosuite 里
 
-from dexmg_camera import build_camera_key_map
-from dexmg_config import DatasetConfig, get_dataset_config
-from dexmg_convert import build_unified_action, build_unified_state
-from dexmg_rotation import rot6d_to_axis_angle
-from dexmg_schema import Schema, build_schema
+from dexmg.dexmg_camera import build_camera_key_map
+from dexmg.dexmg_config import DatasetConfig, get_dataset_config
+from dexmg.dexmg_convert import build_unified_action, build_unified_state
+from dexmg.dexmg_rotation import rot6d_to_axis_angle
+from dexmg.dexmg_schema import Schema, build_schema
 
 import sys
 sys.path.append("/home/ubuntu/myh/expirement")  # 按你实际路径改，或用 PYTHONPATH 代替

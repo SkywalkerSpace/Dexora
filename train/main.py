@@ -44,7 +44,7 @@ def parse_args(input_args=None):
         "--load_from",
         type=str,
         default="lerobot",
-        choices=["hdf5", "bson", "egodex", "lerobot"],
+        choices=["hdf5", "bson", "egodex", "lerobot", "dexmg_hdf5"],
         help=(
             "Dataset backend to load. The canonical Dexora workflow uses "
             "``lerobot`` (the LeRobot v2.1 layout shipped on HuggingFace as "

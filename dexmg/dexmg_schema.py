@@ -31,7 +31,7 @@ from typing import Dict, List
 import h5py
 import numpy as np
 
-from dexmg_config import DATASET_CONFIGS, list_hdf5_by_group
+from dexmg.dexmg_config import DATASET_CONFIGS, list_hdf5_by_group
 
 _SCHEMA_CACHE_FILENAME = "dexmg_unified_schema_cache.json"
 

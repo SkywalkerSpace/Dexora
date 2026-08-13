@@ -25,9 +25,9 @@ from collections import defaultdict
 import h5py
 import numpy as np
 
-from dexmg_config import DATASET_CONFIGS
-from dexmg_convert import build_unified_action, build_unified_state
-from dexmg_schema import build_schema
+from dexmg.dexmg_config import DATASET_CONFIGS
+from dexmg.dexmg_convert import build_unified_action, build_unified_state
+from dexmg.dexmg_schema import build_schema
 
 
 def _iter_demo_low_dim_and_actions(hdf5_path: str, cfg):

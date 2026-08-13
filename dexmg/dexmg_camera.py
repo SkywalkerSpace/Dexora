@@ -18,7 +18,7 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from dexmg_config import DatasetConfig
+from dexmg.dexmg_config import DatasetConfig
 
 DEXORA_CAM_SLOTS = ("cam_high", "cam_left_wrist", "cam_right_wrist", "cam_third_view")
 
