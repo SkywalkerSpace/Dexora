@@ -128,11 +128,16 @@ class _SingleDexmgReader:
         return demo_id, frame_indices
 
     def _read_action_dict(self, demo_id: str, frame_indices: np.ndarray) -> Dict[str, np.ndarray]:
-        out = {}
-        needed_keys = set(self.cfg["action_keys"]) | {"right_gripper", "left_gripper"}
         grp = self._h5file[f"data/{demo_id}/action_dict"]
-        for key in needed_keys:
-            out[key] = grp[key][frame_indices]
+        frame_indices = np.asarray(frame_indices)
+
+        # h5py fancy indexing 要求严格递增且不重复
+        unique_idx, inverse = np.unique(frame_indices, return_inverse=True)
+
+        out = {}
+        for key in self.cfg["action_keys"]:
+            raw = grp[key][unique_idx]      # 用去重递增索引读取（h5py支持）
+            out[key] = raw[inverse]          # 映射回原始顺序（含重复/padding）
         return out
 
     def get_item(self, index: int) -> dict:
