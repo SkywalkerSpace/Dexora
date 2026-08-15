@@ -181,6 +181,7 @@ class VLAConsumerDataset(Dataset):
                 stats_file="dexmg/configs/dataset_statistics.json",
                 filter_keys={},
                 schema_cache_dir="configs/",
+                seq_length=32,
             )
         else:
             raise ValueError(
