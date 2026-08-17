@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 # Project metadata (PEP 621)
 # ---------------------------------------------------------------------------
 [project]
-name = "Dexora"
+name = "dexora"
 version = "0.1.0"
 description = "Dexora: Open-source VLA for High-DoF Bimanual Dexterity (ICRA 2026)"
 readme = "README.md"
@@ -122,6 +122,9 @@ exclude = [
     "lerobot*", "dataprocess*", "deploy*", "ref_*", "reference*",
     "tests*", "assets*", "checkpoints*", "outs*",
 ]
+
+[tool.setuptools.package-dir]
+"dexora" = "."
 
 # ---------------------------------------------------------------------------
 # Ruff: lint + import sorting + simple formatting checks
