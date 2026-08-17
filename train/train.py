@@ -71,7 +71,8 @@ def _dump_batch_probe(state, action, images, out_dir: str, global_step: int) -> 
 
 
 if is_wandb_available():
-    import wandb
+    pass
+    # import wandb
 
 
 def save_model_card(repo_id: str, base_model=str, repo_folder=None):
