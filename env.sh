@@ -56,3 +56,24 @@ OUTPUT_DIR=checkpoints/dexora-400m-posttrain \
     bash s3_post_train.sh
 
 echo '---Done'
+
+
+
+
+conda activate dexora
+
+export DEXORA_LEROBOT_ROOT=/home/mayuhang/datasets/dexmimicgen_datasets
+export DEXORA_STATS=/home/mayuhang/Dexora/dexmg/configs/dataset_statistics.json
+
+export DEXORA_T5=/home/mayuhang/models/t5-v1_1-large
+export DEXORA_SIGLIP=/home/mayuhang/models/siglip-so400m-patch14-384
+
+
+python compute_dexmg_stats.py \
+    --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets \
+    --out_dir configs/
+
+
+NUM_GPUS=1 MAX_TRAIN_STEPS=100000 \
+OUTPUT_DIR=checkpoints/dexora-400m-pretrain \
+    bash s1_pretrain.sh
