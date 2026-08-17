@@ -7,6 +7,7 @@ class T5Embedder:
         "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-small",
         "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-base",
         "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-large",
+        "/home/mayuhang/models/t5-v1_1-large",
         "google/t5-v1_1-small",
         "google/t5-v1_1-base",
         "google/t5-v1_1-large",
