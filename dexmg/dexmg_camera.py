@@ -74,7 +74,9 @@ def extract_camera_images(
             images = np.zeros((T, *image_shape), dtype=np.uint8)
             mask = np.zeros((T,), dtype=bool)
         else:
-            images = obs_group[raw_key][frame_indices]  # (T, H, W, C) uint8
+            # images = obs_group[raw_key][frame_indices]  # (T, H, W, C) uint8
+            uniq_idx, inv_idx = np.unique(frame_indices, return_inverse=True)
+            images = obs_group[raw_key][uniq_idx][inv_idx]
             mask = np.ones((T,), dtype=bool)
         out[slot] = (images, mask)
     return out
