@@ -30,9 +30,9 @@ set -Eeuo pipefail
 # ---------- Training knobs ----------
 : "${CONFIG_PATH:=configs/base_400m.yaml}"
 : "${OUTPUT_DIR:=checkpoints/dexora-400m-pretrain}"
-: "${NUM_GPUS:=1}"
-: "${TRAIN_BATCH_SIZE:=1}"
-: "${GRAD_ACCUM:=1}"
+: "${NUM_GPUS:=4}"
+: "${TRAIN_BATCH_SIZE:=4}"
+: "${GRAD_ACCUM:=2}"
 : "${MAX_TRAIN_STEPS:=100000}"
 : "${CHECKPOINTING_PERIOD:=5000}"
 : "${LEARNING_RATE:=1e-4}"
@@ -66,7 +66,7 @@ if [[ ! -f "$DEXORA_STATS" ]]; then
 fi
 
 # ----- Launch -----
-accelerate launch --num_processes="$NUM_GPUS" \
+accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --mixed_precision="$MIXED_PRECISION" \
     -m train.main \
     --config_path="$CONFIG_PATH" \
