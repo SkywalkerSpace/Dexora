@@ -54,3 +54,5 @@ pyzmq>=25.0
 
 
 mink==0.0.5
+PyOpenGL_accelerate
+tqdm
