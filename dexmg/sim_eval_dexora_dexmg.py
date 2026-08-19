@@ -93,6 +93,7 @@ import json
 import os
 import time
 from typing import Dict, Optional
+from tqdm import tqdm
 
 import cv2
 import h5py
@@ -435,7 +436,8 @@ def rollout_episode(
     action_queue = ChunkActionQueue()
     success = False
     t = 0
-    for t in range(horizon):
+    pbar = tqdm(range(horizon), desc=ds_name, leave=False)
+    for t in pbar:
         if action_queue.empty() or t % replan_interval == 0:
             state_raw, _state_mask = build_state_from_obs(obs, cfg, schema)
             state_norm = normalize(state_raw, stats[ds_name]["state"], normalize_mode)
@@ -455,6 +457,7 @@ def rollout_episode(
 
         action = action_queue.pop()
         obs, reward, done, info = env.step(action)
+        pbar.set_postfix(success=success)
 
         if live_render:
             env.render()
@@ -472,6 +475,7 @@ def rollout_episode(
         if done:
             break
 
+    pbar.close()
     return success, t + 1
 
 
