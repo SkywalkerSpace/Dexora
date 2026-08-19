@@ -51,3 +51,6 @@ pymongo            # only required for the legacy BSON loader
 # Used by mmk_forwarder.py / xhand_forwarder.py / dexora_inference_zmq.py.
 # Optional pyrealsense2 (for the RealSense head camera) is left to the user.
 pyzmq>=25.0
+
+
+mink==0.0.5
