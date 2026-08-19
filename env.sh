@@ -74,6 +74,17 @@ python compute_dexmg_stats.py \
     --out_dir configs/
 
 
-NUM_GPUS=1 MAX_TRAIN_STEPS=100000 \
+NUM_GPUS=4 MAX_TRAIN_STEPS=100000 \
 OUTPUT_DIR=checkpoints/dexora-400m-pretrain \
     bash s1_pretrain.sh
+
+
+
+python sim_eval_dexora_dexmg.py \
+    --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets \
+    --model_path /home/mayuhang/Dexora/checkpoints/dexora-400m-pretrain/ \
+    --model_config_path  /home/mayuhang/Dexora/configs/base_400m.yaml \
+    --stats_file/home/mayuhang/Dexora/dexmg/configs/dataset_statistics.json \
+    --schema_cache_dir /home/mayuhang/Dexora/dexmg/configs \
+    --n_rollouts 8 --horizon 400 \
+    --video_dir /home/mayuhang/Dexora/eval_videos

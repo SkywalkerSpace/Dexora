@@ -117,7 +117,7 @@ include-package-data = true
 where = ["."]
 # ``configs*`` is included so ``from configs.state_vec import ...`` works after
 # ``pip install -e .`` (legacy data loaders under ``data/`` still import it).
-include = ["models*", "train*", "data*", "scripts*", "configs*", "tools*", "dexmg"]
+include = ["models*", "train*", "data*", "scripts*", "configs*", "tools*", "dexmg*", "deploy*"]
 exclude = [
     "lerobot*", "dataprocess*", "deploy*", "ref_*", "reference*",
     "tests*", "assets*", "checkpoints*", "outs*",

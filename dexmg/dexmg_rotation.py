@@ -92,3 +92,59 @@ def axis_angle_to_rot6d(aa: np.ndarray) -> np.ndarray:
 
 def quat_to_rot6d(quat: np.ndarray, order: str = "xyzw") -> np.ndarray:
     return matrix_to_rot6d(quat_to_matrix(quat, order=order))
+
+
+# ============================================================
+# 反方向：6D -> 旋转矩阵 -> axis-angle
+# 训练时只用到了正向转换（写统一 schema），这里补上推理时需要的
+# 反向转换（模型输出 6D，panda 组 env.step 需要 axis-angle）。
+# ============================================================
+
+def rot6d_to_matrix(rot6d: np.ndarray) -> np.ndarray:
+    """rot6d: (..., 6) -> (..., 3, 3)，标准 Gram-Schmidt 重建（Zhou et al. 2019）。"""
+    rot6d = np.asarray(rot6d, dtype=np.float64)
+    a1 = rot6d[..., 0:3]
+    a2 = rot6d[..., 3:6]
+
+    eps = 1e-8
+    b1 = a1 / np.clip(np.linalg.norm(a1, axis=-1, keepdims=True), eps, None)
+    proj = np.sum(b1 * a2, axis=-1, keepdims=True) * b1
+    b2 = a2 - proj
+    b2 = b2 / np.clip(np.linalg.norm(b2, axis=-1, keepdims=True), eps, None)
+    b3 = np.cross(b1, b2)
+
+    R = np.stack([b1, b2, b3], axis=-1)  # 列向量拼成矩阵
+    return R
+
+
+def matrix_to_axis_angle(R: np.ndarray) -> np.ndarray:
+    """R: (..., 3, 3) -> (..., 3) axis-angle。"""
+    R = np.asarray(R, dtype=np.float64)
+    # theta 由迹算出来
+    trace = R[..., 0, 0] + R[..., 1, 1] + R[..., 2, 2]
+    cos_theta = np.clip((trace - 1.0) / 2.0, -1.0, 1.0)
+    theta = np.arccos(cos_theta)  # (...,)
+
+    # 反对称部分提取旋转轴
+    rx = R[..., 2, 1] - R[..., 1, 2]
+    ry = R[..., 0, 2] - R[..., 2, 0]
+    rz = R[..., 1, 0] - R[..., 0, 1]
+    axis_unnorm = np.stack([rx, ry, rz], axis=-1)  # (..., 3)
+
+    sin_theta = np.sin(theta)
+    eps = 1e-8
+    small = sin_theta < eps
+
+    axis = np.zeros_like(axis_unnorm)
+    denom = np.clip(2.0 * sin_theta, eps, None)[..., None]
+    axis = axis_unnorm / denom
+
+    aa = axis * theta[..., None]
+    # theta ~ 0（无旋转）时上面的除法数值不稳定，直接置零向量
+    if np.any(small):
+        aa[small] = 0.0
+    return aa.astype(np.float32)
+
+
+def rot6d_to_axis_angle(rot6d: np.ndarray) -> np.ndarray:
+    return matrix_to_axis_angle(rot6d_to_matrix(rot6d))

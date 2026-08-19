@@ -79,9 +79,9 @@ from dexmg.dexmg_convert import build_unified_action, build_unified_state
 from dexmg.dexmg_rotation import rot6d_to_axis_angle
 from dexmg.dexmg_schema import Schema, build_schema
 
-import sys
-sys.path.append("/home/ubuntu/myh/expirement")  # 按你实际路径改，或用 PYTHONPATH 代替
-from Dexora.deploy.dexora_policy import DexoraPolicy, DexoraPolicyConfig  # noqa: E402
+# import sys
+# sys.path.append("/home/ubuntu/myh/expirement")  # 按你实际路径改，或用 PYTHONPATH 代替
+from deploy.dexora_policy import DexoraPolicy, DexoraPolicyConfig  # noqa: E402
 
 
 # =============================================================================
