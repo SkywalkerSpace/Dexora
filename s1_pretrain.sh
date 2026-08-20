@@ -90,4 +90,5 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --dataloader_num_workers="$DATALOADER_NUM_WORKERS" \
     --state_noise_snr=40 \
     --image_aug \
-    --report_to="$REPORT_TO"
+    --report_to="$REPORT_TO" \
+    --probe_period=1

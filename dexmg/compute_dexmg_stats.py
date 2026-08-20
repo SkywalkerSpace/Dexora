@@ -127,6 +127,9 @@ def main(dataset_root: str, out_dir: str):
             "state_mean": group_state_stats[group]["mean"],
             "state_std": group_state_stats[group]["std"],
             "state_norm": group_state_stats[group]["norm"],  # RMS，不是 std
+            "action_mean": group_action_stats[group]["mean"],
+            "action_std": group_action_stats[group]["std"],
+            "action_norm": group_action_stats[group]["norm"],
         }
     with open(stat_ours_path, "w") as f:
         json.dump(stat_ours, f, indent=2)

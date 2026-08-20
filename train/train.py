@@ -71,8 +71,8 @@ def _dump_batch_probe(state, action, images, out_dir: str, global_step: int) -> 
 
 
 if is_wandb_available():
-    pass
-    # import wandb
+    #
+    import wandb
 
 
 def save_model_card(repo_id: str, base_model=str, repo_folder=None):
@@ -440,6 +440,11 @@ def train(args, logger):
                 actions = batch["actions"].to(dtype=weight_dtype)
                 state_elem_mask = batch["state_elem_mask"].to(dtype=weight_dtype)
                 ctrl_freqs = batch["ctrl_freqs"]
+                # 归一化（RMS scale-only，和之前 compute_dexmg_stats.py 里 norm 字段的定义一致）
+                state_norm = batch["state_norm"].to(dtype=weight_dtype).unsqueeze(1)    # (B, 1, D)
+                action_norm = batch["action_norm"].to(dtype=weight_dtype).unsqueeze(1)  # (B, 1, D)
+                states = states / state_norm
+                actions = actions / action_norm
 
                 if (
                     args.probe_period > 0

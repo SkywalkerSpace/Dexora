@@ -236,4 +236,5 @@ class DexmgHDF5VLADataset:
         item["state_mean"] = np.array(stat["state"]["mean"], dtype=np.float32)
         item["state_std"] = np.array(stat["state"]["std"], dtype=np.float32)
         item["state_norm"] = np.array(stat["state"]["norm"], dtype=np.float32)
+        item["action_norm"] = np.array(stat["action"]["norm"], dtype=np.float32)
         return item

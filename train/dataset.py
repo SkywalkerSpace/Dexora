@@ -330,6 +330,7 @@ class VLAConsumerDataset(Dataset):
                     state_std = res['state_std']
                     state_mean = res['state_mean']
                     state_norm = res['state_norm']
+                    action_norm = res['action_norm'] 
                 else:
                     (content, _, states, _, actions, _, 
                     state_elem_mask, *image_metas, 
@@ -356,6 +357,7 @@ class VLAConsumerDataset(Dataset):
                 
                 # Stat for the episode that the step belongs to 
                 data_dict["state_norm"] = state_norm
+                data_dict["action_norm"] = action_norm 
                 
                 # We replace the invalid images with the background image
                 # and also randomly mask images by the background image
@@ -499,6 +501,7 @@ class DataCollatorForVLAConsumerDataset(object):
             "actions": [],
             "state_elem_mask": [],
             "state_norm": [],
+            "action_norm": [],
             "images": [],
             "data_indices": [],
             "ctrl_freqs": []
@@ -511,7 +514,7 @@ class DataCollatorForVLAConsumerDataset(object):
             # Convert all the numpy arrays to tensor
             keys_to_check = [
                 'states', 'actions',
-                'state_elem_mask', 'state_norm',
+                'state_elem_mask', 'state_norm', 'action_norm'
             ]
             for key in keys_to_check:
                 if isinstance(instance[key], torch.Tensor):
@@ -541,7 +544,7 @@ class DataCollatorForVLAConsumerDataset(object):
         
         keys_to_stack = [
             'states', 'actions',
-            'state_elem_mask', 'state_norm',
+            'state_elem_mask', 'state_norm', 'action_norm',
             "images"
         ]
         for key in keys_to_stack:

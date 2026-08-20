@@ -69,6 +69,9 @@ export DEXORA_STATS=/home/mayuhang/Dexora/dexmg/configs/dataset_statistics.json
 export DEXORA_T5=/home/mayuhang/models/t5-v1_1-large
 export DEXORA_SIGLIP=/home/mayuhang/models/siglip-so400m-patch14-384
 
+export WANDB_ENTITY="skywalkerm-no"
+export WANDB_PROJECT="Dexora"
+
 
 python compute_dexmg_stats.py \
     --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets \
