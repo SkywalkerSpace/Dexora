@@ -83,6 +83,8 @@ TRAIN_BATCH_SIZE=8 \
 MAX_TRAIN_STEPS=100000 \
 OUTPUT_DIR=checkpoints/dexora-400m-pretrain \
 CUDA_VISIBLE_DEVICES=2,3 \
+REPORT_TO=wandb \
+WANDB_MODE=online \
     bash s1_pretrain.sh
 
 

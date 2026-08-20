@@ -91,4 +91,4 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --state_noise_snr=40 \
     --image_aug \
     --report_to="$REPORT_TO" \
-    --probe_period=1
+    --probe_period=0
