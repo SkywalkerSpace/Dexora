@@ -78,8 +78,11 @@ python compute_dexmg_stats.py \
     --out_dir configs/
 
 
-NUM_GPUS=4 MAX_TRAIN_STEPS=100000 \
+NUM_GPUS=2 \
+TRAIN_BATCH_SIZE=8 \
+MAX_TRAIN_STEPS=100000 \
 OUTPUT_DIR=checkpoints/dexora-400m-pretrain \
+CUDA_VISIBLE_DEVICES=2,3 \
     bash s1_pretrain.sh
 
 
