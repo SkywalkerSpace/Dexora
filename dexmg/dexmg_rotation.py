@@ -133,16 +133,30 @@ def matrix_to_axis_angle(R: np.ndarray) -> np.ndarray:
 
     sin_theta = np.sin(theta)
     eps = 1e-8
-    small = sin_theta < eps
 
-    axis = np.zeros_like(axis_unnorm)
+    near_zero = theta < eps          # 真正的"没转"
+    near_pi = (np.pi - theta) < 1e-4  # 新增：接近180°的情况单独处理
+
     denom = np.clip(2.0 * sin_theta, eps, None)[..., None]
     axis = axis_unnorm / denom
-
     aa = axis * theta[..., None]
-    # theta ~ 0（无旋转）时上面的除法数值不稳定，直接置零向量
-    if np.any(small):
-        aa[small] = 0.0
+
+    if np.any(near_pi):
+        # θ≈π 时 R ≈ 2*n n^T - I，从对角线重建轴方向（正负号对180°旋转无影响）
+        diag = np.stack([R[..., 0, 0], R[..., 1, 1], R[..., 2, 2]], axis=-1)
+        axis_pi = np.sqrt(np.clip((diag + 1.0) / 2.0, 0.0, None))
+        # 用非对角项恢复符号
+        sign_x = np.sign(R[..., 2, 1] + R[..., 1, 2])
+        sign_y = np.sign(R[..., 0, 2] + R[..., 2, 0])
+        axis_pi = axis_pi * np.stack([np.ones_like(sign_x), sign_x, sign_y], axis=-1)
+        norm_pi = np.clip(np.linalg.norm(axis_pi, axis=-1, keepdims=True), eps, None)
+        axis_pi = axis_pi / norm_pi
+        aa_pi = axis_pi * np.pi
+        aa = np.where(near_pi[..., None], aa_pi, aa)
+
+    if np.any(near_zero):
+        aa = np.where(near_zero[..., None], 0.0, aa)
+
     return aa.astype(np.float32)
 
 

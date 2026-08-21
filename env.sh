@@ -96,4 +96,5 @@ python sim_eval_dexora_dexmg.py \
     --stats_file /home/mayuhang/Dexora/dexmg/configs/dataset_statistics.json \
     --schema_cache_dir /home/mayuhang/Dexora/dexmg/configs \
     --n_rollouts 8 --horizon 400 \
-    --video_dir /home/mayuhang/Dexora/eval_videos
+    --video_dir /home/mayuhang/Dexora/eval_videos \
+    --normalize_mode rms
