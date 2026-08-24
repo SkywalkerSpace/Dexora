@@ -1,195 +1,154 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-verify_dexmg_assumptions.py
+verify_dexmg_left_right_v2.py
 
-一次性验证 dexmg 数据处理管线里两个"没有真正验证过、纯靠命名习惯猜测"的假设：
+v1（verify_dexmg_assumptions.py 里的检查1）把整条 demo 的位移拼成一个长向量
+算一次余弦相似度，容易被大量"没怎么在动"的帧稀释掉真实信号，单条 demo 上
+四个相似度经常卡在 0.4~0.7 分不出来（实测 two_arm_box_cleanup demo_10 就是
+这样）。
 
-  1. state 侧 robot0 / robot1 到底对应右臂还是左臂
-     （对应 dexmg_schema.py::_low_dim_key_roles 里的假设）
-  2. eef 四元数到底是 xyzw 还是 wxyz 顺序
-     （对应 dexmg_rotation.py::quat_to_matrix 默认的 xyzw 假设）
-
-只对 panda 组（相对位姿动作，right_rel_pos / left_rel_pos 有明确物理意义）
-做左右臂检查——humanoid 组的 low_dim_keys 本身已经带 right_/left_ 前缀，
-不存在"猜"的问题，跳过即可。
+这版改成：
+  1. 只统计"这只手确实在明显移动"的帧（按这条 demo 自己的位移幅度动态定阈值），
+     而不是不分青红皂白地把所有帧都算进去；
+  2. 逐帧算余弦相似度再取平均，而不是把整条轨迹拼成一个大向量算一次；
+  3. 一次跑多条 demo，把结果累加，摊薄单条 demo 的偶然性。
 
 用法：
-    python verify_dexmg_assumptions.py \
+    python verify_dexmg_left_right_v2.py \
         --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets \
         --hdf5 two_arm_box_cleanup.hdf5 \
-        --out_dir ./dexmg_verify_out
-
-建议用 two_arm_box_cleanup / two_arm_lift_tray / two_arm_drawer_cleanup
-三个 panda 组数据集之一（双臂动作明显、不容易出现"两臂都不怎么动"导致
-相关性判断不出来的情况）。跑完看终端输出的结论 + --out_dir 下保存的
-手腕相机截图（肉眼再确认一次）。
-
-不依赖 robomimic / dexmimicgen，只用 h5py + numpy + PIL。
+        --num_demos 20
 """
 from __future__ import annotations
 
 import argparse
-import os
 
 import h5py
 import numpy as np
-from PIL import Image
-
-WRIST_IMAGE_KEYS = ("robot0_eye_in_hand_image", "robot1_eye_in_hand_image")
 
 
-def _cos_sim(a: np.ndarray, b: np.ndarray) -> float:
-    """整段轨迹拉平后的余弦相似度：a、b 都是 (T, 3) 的位移序列。"""
-    a = a.reshape(-1).astype(np.float64)
-    b = b.reshape(-1).astype(np.float64)
-    na = np.linalg.norm(a)
-    nb = np.linalg.norm(b)
-    if na < 1e-8 or nb < 1e-8:
-        return 0.0
-    return float(np.dot(a, b) / (na * nb))
+def per_frame_cos_sim(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """a, b: (T, 3) -> (T,) 逐帧余弦相似度。"""
+    na = np.linalg.norm(a, axis=-1)
+    nb = np.linalg.norm(b, axis=-1)
+    denom = np.clip(na * nb, 1e-8, None)
+    return np.sum(a * b, axis=-1) / denom
 
 
-def check_left_right(f: h5py.File, demo: str, out_dir: str) -> None:
-    print("\n" + "=" * 70)
-    print("[检查 1] state 侧 robot0 / robot1 到底对应右臂还是左臂")
-    print("=" * 70)
+def collect_stats(f: h5py.File, demo_keys: list[str], active_ratio: float = 0.3):
+    """在多条 demo 上累积 4 种配对(robot0/1 x right/left)的"活跃帧"余弦相似度。"""
+    buckets = {
+        "r0_right": [], "r0_left": [],
+        "r1_right": [], "r1_left": [],
+    }
+    n_used_demos = 0
 
-    obs = f[f"data/{demo}/obs"]
-    action_dict = f[f"data/{demo}/action_dict"]
+    for demo in demo_keys:
+        obs = f[f"data/{demo}/obs"]
+        action_dict = f[f"data/{demo}/action_dict"]
+        if not all(k in obs for k in ["robot0_eef_pos", "robot1_eef_pos"]):
+            continue
+        if not all(k in action_dict for k in ["right_rel_pos", "left_rel_pos"]):
+            continue
 
-    required = ["robot0_eef_pos", "robot1_eef_pos"]
-    if not all(k in obs for k in required) or \
-       not all(k in action_dict for k in ["right_rel_pos", "left_rel_pos"]):
-        print("[跳过] 这个 hdf5 不是 panda 组（没有 robot0/robot1_eef_pos 或 "
-              "right/left_rel_pos），左右臂检查只对 panda 组有意义，直接跳过。")
-        return
+        robot0_pos = obs["robot0_eef_pos"][()]
+        robot1_pos = obs["robot1_eef_pos"][()]
+        right_rel_pos = action_dict["right_rel_pos"][()]
+        left_rel_pos = action_dict["left_rel_pos"][()]
 
-    robot0_pos = obs["robot0_eef_pos"][()]  # (T, 3)
-    robot1_pos = obs["robot1_eef_pos"][()]  # (T, 3)
-    right_rel_pos = action_dict["right_rel_pos"][()]  # (T, 3)
-    left_rel_pos = action_dict["left_rel_pos"][()]    # (T, 3)
+        T = min(len(robot0_pos) - 1, len(right_rel_pos), len(left_rel_pos))
+        if T < 5:
+            continue
+        robot0_delta = np.diff(robot0_pos, axis=0)[:T]
+        robot1_delta = np.diff(robot1_pos, axis=0)[:T]
+        right_rel_pos = right_rel_pos[:T]
+        left_rel_pos = left_rel_pos[:T]
 
-    # 用 eef_pos 的逐帧差分（真实位移）去和 action 里记录的相对位移比较，
-    # 二者理论上应该高度一致（同符号、同量级），除非左右被搞反了。
-    robot0_delta = np.diff(robot0_pos, axis=0)
-    robot1_delta = np.diff(robot1_pos, axis=0)
-    T = len(robot0_delta)
-    right_rel_pos_aligned = right_rel_pos[:T]
-    left_rel_pos_aligned = left_rel_pos[:T]
+        # 每条 demo 自己定"活跃帧"阈值：用这条 demo 里该动作序列位移幅度的
+        # 90分位数 * active_ratio 做阈值，只在该动作明显发生位移的帧上比较。
+        right_mag = np.linalg.norm(right_rel_pos, axis=-1)
+        left_mag = np.linalg.norm(left_rel_pos, axis=-1)
+        right_thresh = np.quantile(right_mag, 0.9) * active_ratio
+        left_thresh = np.quantile(left_mag, 0.9) * active_ratio
 
-    corr_r0_right = _cos_sim(robot0_delta, right_rel_pos_aligned)
-    corr_r0_left = _cos_sim(robot0_delta, left_rel_pos_aligned)
-    corr_r1_right = _cos_sim(robot1_delta, right_rel_pos_aligned)
-    corr_r1_left = _cos_sim(robot1_delta, left_rel_pos_aligned)
+        right_active = right_mag > max(right_thresh, 1e-6)
+        left_active = left_mag > max(left_thresh, 1e-6)
 
-    print(f"robot0_eef_pos 差分 与 right_rel_pos 的余弦相似度: {corr_r0_right:+.4f}")
-    print(f"robot0_eef_pos 差分 与 left_rel_pos  的余弦相似度: {corr_r0_left:+.4f}")
-    print(f"robot1_eef_pos 差分 与 right_rel_pos 的余弦相似度: {corr_r1_right:+.4f}")
-    print(f"robot1_eef_pos 差分 与 left_rel_pos  的余弦相似度: {corr_r1_left:+.4f}")
+        if right_active.sum() >= 3:
+            buckets["r0_right"].append(
+                per_frame_cos_sim(robot0_delta[right_active], right_rel_pos[right_active]))
+            buckets["r1_right"].append(
+                per_frame_cos_sim(robot1_delta[right_active], right_rel_pos[right_active]))
+        if left_active.sum() >= 3:
+            buckets["r0_left"].append(
+                per_frame_cos_sim(robot0_delta[left_active], left_rel_pos[left_active]))
+            buckets["r1_left"].append(
+                per_frame_cos_sim(robot1_delta[left_active], left_rel_pos[left_active]))
 
-    # 正确映射应该是 (robot_X, right/left) 两两之间相似度接近 +1，
-    # 错配的那一对应该明显更低（两条手臂各自独立运动，互相关性弱）。
-    if corr_r0_right > 0.8 and corr_r1_left > 0.8:
-        verdict = "robot0 = 右臂, robot1 = 左臂 —— 和 dexmg_schema.py 当前假设一致 [OK]"
-    elif corr_r0_left > 0.8 and corr_r1_right > 0.8:
-        verdict = ("robot0 = 左臂, robot1 = 右臂 —— 和 dexmg_schema.py 当前假设相反 [FAIL]，"
-                   "需要去 dexmg_schema.py::_low_dim_key_roles 把左右判断反过来")
-    else:
-        verdict = ("四个相似度都不够高（<0.8），可能是这条 demo 里两臂运动相关性本来就弱，"
-                   "建议换一条动作更明显的 demo，或者换 two_arm_lift_tray / "
-                   "two_arm_drawer_cleanup 重跑一次再综合判断。")
-    print(f"\n>>> 结论: {verdict}\n")
+        n_used_demos += 1
 
-    # 顺手把手腕相机首帧存出来，方便肉眼确认"抓取动作发生在画面里的哪只手"
-    for key in WRIST_IMAGE_KEYS:
-        if key in obs:
-            img = obs[key][0]
-            Image.fromarray(img).save(os.path.join(out_dir, f"{demo}_{key}_frame0.png"))
-    if "agentview_image" in obs:
-        Image.fromarray(obs["agentview_image"][0]).save(
-            os.path.join(out_dir, f"{demo}_agentview_frame0.png"))
-    print(f"[已保存] 手腕相机 + 第三视角首帧图片到 {out_dir}，可以肉眼再确认一遍")
-
-
-def check_quat_order(f: h5py.File, demo: str) -> None:
-    print("\n" + "=" * 70)
-    print("[检查 2] eef 四元数是 xyzw 还是 wxyz")
-    print("=" * 70)
-
-    obs = f[f"data/{demo}/obs"]
-    quat_keys = [k for k in obs.keys() if k.endswith("eef_quat")]
-    if not quat_keys:
-        print("[跳过] 这个 hdf5 里没找到 *eef_quat 字段。")
-        return
-
-    for key in quat_keys:
-        quat = obs[key][()]  # (T, 4)
-        mean = quat.mean(axis=0)
-        std = quat.std(axis=0)
-        abs_mean = np.abs(quat).mean(axis=0)
-        norm = np.linalg.norm(quat, axis=1)
-
-        print(f"\n{key}: (T={quat.shape[0]})")
-        print(f"  每维 mean     : {mean}")
-        print(f"  每维 std      : {std}")
-        print(f"  每维 |mean|   : {abs_mean}")
-        print(f"  norm 范围     : min={norm.min():.4f}, max={norm.max():.4f} "
-              f"(应非常接近 1；不接近的话说明这4维根本不是同一个四元数，先查 key 对不对)")
-
-        # 启发式：标量分量(w)在末端夹爪姿态大体稳定的任务里，通常绝对值偏大、
-        # 方差偏小（末端姿态只在小范围内摆动，不会连续转过大角度）。
-        idx_largest_absmean = int(np.argmax(abs_mean))
-        idx_smallest_std = int(np.argmin(std))
-        print(f"  |mean| 最大的分量下标: {idx_largest_absmean}")
-        print(f"  std   最小的分量下标: {idx_smallest_std}")
-        if idx_largest_absmean == 3 and idx_smallest_std == 3:
-            print("  -> 下标3（最后一维）最像标量部分 w，支持当前的 xyzw 假设")
-        elif idx_largest_absmean == 0 and idx_smallest_std == 0:
-            print("  -> 下标0（第一维）最像标量部分 w，和当前 xyzw 假设相反，应该是 wxyz")
-        else:
-            print("  -> 不够明显，光靠统计量判断不了，建议结合下面的 robosuite 惯例交叉验证")
-
-    print(
-        "\n[补充参考] robosuite/robomimic 的 obs 惯例：eef_quat 来自 "
-        "robosuite.utils.transform_utils.mat2quat()，这个函数按官方实现返回的是 "
-        "[x, y, z, w] 顺序（和 scipy.spatial.transform.Rotation 的惯例一致）。"
-        "如果你用的 robosuite 版本没改过这个函数，代码里 quat_to_matrix 默认的 "
-        "xyzw 假设大概率是对的；但不同 fork/版本可能有出入，建议以下面的自动检测"
-        "（如果当前环境装了 robosuite）或上面的统计结果为准。"
-    )
-    try:
-        import inspect
-
-        import robosuite.utils.transform_utils as T
-        src = inspect.getsource(T.mat2quat)
-        print("\n[已在当前环境找到 robosuite，mat2quat 源码如下，可直接确认顺序]")
-        print(src)
-    except Exception as e:
-        print(f"\n[提示] 当前环境没装 robosuite 或读取源码失败（{e}），跳过自动交叉验证。")
+    print(f"实际用上的 demo 数: {n_used_demos} / {len(demo_keys)}")
+    return {k: (np.concatenate(v) if len(v) > 0 else np.array([])) for k, v in buckets.items()}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset_root", type=str, required=True)
-    parser.add_argument("--hdf5", type=str, default="two_arm_box_cleanup.hdf5",
-                         help="建议用双臂协作、动作明显的 panda 组数据集之一："
-                              "two_arm_box_cleanup / two_arm_lift_tray / two_arm_drawer_cleanup")
-    parser.add_argument("--demo", type=str, default=None, help="不填则自动取第一条 demo")
-    parser.add_argument("--out_dir", type=str, default="./dexmg_verify_out")
+    parser.add_argument("--hdf5", type=str, default="two_arm_box_cleanup.hdf5")
+    parser.add_argument("--num_demos", type=int, default=20,
+                         help="从头开始取多少条 demo 一起统计（越多越稳，但会变慢）")
+    parser.add_argument("--active_ratio", type=float, default=0.3,
+                         help="活跃帧阈值 = 该动作位移幅度的90分位数 * active_ratio，"
+                              "数值越小纳入的帧越多（含更多噪声），越大越严格（帧数变少）")
     args = parser.parse_args()
 
-    os.makedirs(args.out_dir, exist_ok=True)
-    hdf5_path = os.path.join(args.dataset_root, args.hdf5)
-
+    hdf5_path = f"{args.dataset_root}/{args.hdf5}"
     with h5py.File(hdf5_path, "r") as f:
         demo_keys = sorted(f["data"].keys(), key=lambda x: int(x.split("_")[-1]))
-        demo = args.demo or demo_keys[0]
+        demo_keys = demo_keys[: args.num_demos]
         print(f"数据集: {hdf5_path}")
-        print(f"使用 demo: {demo}  (共 {len(demo_keys)} 条 demo)")
+        print(f"计划使用前 {len(demo_keys)} 条 demo，active_ratio={args.active_ratio}")
 
-        check_left_right(f, demo, args.out_dir)
-        check_quat_order(f, demo)
+        stats = collect_stats(f, demo_keys, active_ratio=args.active_ratio)
+
+    print("\n" + "=" * 70)
+    print("活跃帧（该动作明显发生位移的帧）上的逐帧余弦相似度统计")
+    print("=" * 70)
+    for key in ["r0_right", "r0_left", "r1_right", "r1_left"]:
+        arr = stats[key]
+        if len(arr) == 0:
+            print(f"{key}: 没有足够的活跃帧，跳过")
+            continue
+        print(f"{key}: n_frames={len(arr):5d}  mean={arr.mean():+.4f}  "
+              f"median={np.median(arr):+.4f}  std={arr.std():.4f}")
+
+    r0_right = stats["r0_right"].mean() if len(stats["r0_right"]) else np.nan
+    r0_left = stats["r0_left"].mean() if len(stats["r0_left"]) else np.nan
+    r1_right = stats["r1_right"].mean() if len(stats["r1_right"]) else np.nan
+    r1_left = stats["r1_left"].mean() if len(stats["r1_left"]) else np.nan
+
+    print("\n" + "=" * 70)
+    print("结论")
+    print("=" * 70)
+    hypothesis_a = (r0_right if not np.isnan(r0_right) else -1) + \
+                   (r1_left if not np.isnan(r1_left) else -1)
+    hypothesis_b = (r0_left if not np.isnan(r0_left) else -1) + \
+                   (r1_right if not np.isnan(r1_right) else -1)
+    print(f"假设A (robot0=右, robot1=左) 得分: {hypothesis_a:+.4f}  "
+          f"(= r0_right {r0_right:+.4f} + r1_left {r1_left:+.4f})")
+    print(f"假设B (robot0=左, robot1=右) 得分: {hypothesis_b:+.4f}  "
+          f"(= r0_left {r0_left:+.4f} + r1_right {r1_right:+.4f})")
+    gap = abs(hypothesis_a - hypothesis_b)
+    if gap < 0.3:
+        print(f"\n>>> 两个假设得分差距只有 {gap:.4f}，还是不够明确，建议加大 --num_demos "
+              f"或换一个双臂配合更紧密的数据集（two_arm_lift_tray 通常两臂同时动，"
+              f"信号可能更强）")
+    elif hypothesis_a > hypothesis_b:
+        print("\n>>> 假设A胜出: robot0 = 右臂, robot1 = 左臂 —— 和 dexmg_schema.py 当前假设一致 [OK]")
+    else:
+        print("\n>>> 假设B胜出: robot0 = 左臂, robot1 = 右臂 —— 和 dexmg_schema.py 当前假设相反 [FAIL]，"
+              "需要去 dexmg_schema.py::_low_dim_key_roles 把左右判断反过来")
 
 
 if __name__ == "__main__":
