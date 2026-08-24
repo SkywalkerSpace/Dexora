@@ -15,7 +15,7 @@ v1（verify_dexmg_assumptions.py 里的检查1）把整条 demo 的位移拼成�
   3. 一次跑多条 demo，把结果累加，摊薄单条 demo 的偶然性。
 
 用法：
-    python verify_dexmg_left_right_v2.py \
+    python verify_dexmg_left_right.py \
         --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets \
         --hdf5 two_arm_box_cleanup.hdf5 \
         --num_demos 20
