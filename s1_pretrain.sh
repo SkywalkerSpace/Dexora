@@ -36,7 +36,7 @@ set -Eeuo pipefail
 : "${MAX_TRAIN_STEPS:=25000}"
 : "${CHECKPOINTING_PERIOD:=5000}"
 : "${LEARNING_RATE:=1e-5}"
-: "${LR_WARMUP_STEPS:=200}" 
+: "${LR_WARMUP_STEPS:=500}" 
 : "${MIXED_PRECISION:=bf16}"
 : "${LR_SCHEDULER:=cosine}"
 : "${DATALOADER_NUM_WORKERS:=4}"
