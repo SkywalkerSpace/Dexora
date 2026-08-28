@@ -117,7 +117,7 @@ def main(dataset_root: str, out_dir: str):
         json.dump(all_stats, f, indent=2)
     print(f"写入 {stats_path}")
 
-    stat_ours_path = os.path.join(out_dir, "dataset_stat_ours.json")
+    stat_ours_path = os.path.join(out_dir, "dataset_stat.json")
     stat_ours = {}
     if os.path.exists(stat_ours_path):
         with open(stat_ours_path, "r") as f:

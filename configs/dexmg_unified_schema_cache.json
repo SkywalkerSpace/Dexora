@@ -1,0 +1,55 @@
+{
+  "dim": 42,
+  "slots": {
+    "right_arm_pos": {
+      "name": "right_arm_pos",
+      "offset": 0,
+      "dim": 3
+    },
+    "right_arm_rot6d": {
+      "name": "right_arm_rot6d",
+      "offset": 3,
+      "dim": 6
+    },
+    "right_gripper": {
+      "name": "right_gripper",
+      "offset": 9,
+      "dim": 12
+    },
+    "left_arm_pos": {
+      "name": "left_arm_pos",
+      "offset": 21,
+      "dim": 3
+    },
+    "left_arm_rot6d": {
+      "name": "left_arm_rot6d",
+      "offset": 24,
+      "dim": 6
+    },
+    "left_gripper": {
+      "name": "left_gripper",
+      "offset": 30,
+      "dim": 12
+    }
+  },
+  "state_real_width": {
+    "panda": {
+      "right_gripper": 12,
+      "left_gripper": 12
+    },
+    "humanoid": {
+      "right_gripper": 11,
+      "left_gripper": 11
+    }
+  },
+  "action_real_width": {
+    "panda": {
+      "right_gripper": 6,
+      "left_gripper": 6
+    },
+    "humanoid": {
+      "right_gripper": 6,
+      "left_gripper": 6
+    }
+  }
+}
