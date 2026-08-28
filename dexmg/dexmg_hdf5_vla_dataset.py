@@ -105,6 +105,11 @@ class _SingleDexmgReader:
                 f"仅将 .hdf5 后缀替换为 _videos.hdf5）"
             )
             self._h5file_video = h5py.File(hdf5_path_video, "r", swmr=True)
+            self._hdf5_path_video = hdf5_path_video
+            # 视频 hdf5 里的 demo 数量可能少于原始 demo hdf5（例如渲染视频时
+            # 跳过了个别失败/质量不合格的 demo）。逐 demo 判断存在性，缺失时
+            # 回退读原始分辨率图像，而不是直接崩掉；每个缺失的 demo 只警告一次。
+            self._missing_video_demos: set = set()
 
         # 注意：dexmimicgen 把 action 分量存在 data/{ep}/action_dict/{key} 下（不是
         # data/{ep}/{key} 顶层），而 robomimic SequenceDataset 内部（get_action_traj 等）
@@ -161,6 +166,27 @@ class _SingleDexmgReader:
             ])
         return demo_id, frame_indices
 
+    def _get_camera_obs_group(self, demo_id: str):
+        """
+        返回用于读取相机图像的 obs group。若启用了高分辨率视频文件
+        (self._h5file_video is not None) 且该 demo 在视频文件里存在，则从
+        视频文件读；否则（未启用高分辨率视频，或该 demo 在视频文件里缺失）
+        回退到原始 demo hdf5 (self._h5file)，保证不会因为个别 demo 没有
+        渲染高分辨率视频而导致训练崩溃。
+        """
+        if self._h5file_video is not None:
+            path = f"data/{demo_id}/obs"
+            if path in self._h5file_video:
+                return self._h5file_video[path]
+            if demo_id not in self._missing_video_demos:
+                self._missing_video_demos.add(demo_id)
+                print(
+                    f"[dexmg_hdf5_vla_dataset] 警告: {demo_id} 在视频 hdf5 "
+                    f"{self._hdf5_path_video} 中不存在，该 demo 的图像回退到 "
+                    f"原始分辨率读取 (仅提示一次)"
+                )
+        return self._h5file[f"data/{demo_id}/obs"]
+
     def _read_action_dict(self, demo_id: str, frame_indices: np.ndarray) -> Dict[str, np.ndarray]:
         grp = self._h5file[f"data/{demo_id}/action_dict"]
         frame_indices = np.asarray(frame_indices)
@@ -183,10 +209,9 @@ class _SingleDexmgReader:
         action_dict = self._read_action_dict(demo_id, frame_indices)
         unified_action, action_mask = build_unified_action(action_dict, self.cfg, self.schema)
 
-        # 图像观测优先从高分辨率视频 hdf5 读取（若已启用）；未启用时（video_res
-        # == "84x84"）与之前一样直接从原始 demo hdf5 读取。
-        image_h5file = self._h5file_video if self._h5file_video is not None else self._h5file
-        obs_group = image_h5file[f"data/{demo_id}/obs"]
+        # 图像观测优先从高分辨率视频 hdf5 读取（若已启用且该 demo 存在）；否则
+        # （未启用，或该 demo 在视频文件里缺失）回退到原始 demo hdf5。
+        obs_group = self._get_camera_obs_group(demo_id)
         cams = extract_camera_images(obs_group, frame_indices, self.cam_map, self.image_shape)
 
         item = {
