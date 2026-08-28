@@ -90,8 +90,9 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --lr_warmup_steps="$LR_WARMUP_STEPS" \
     --mixed_precision="$MIXED_PRECISION" \
     --dataloader_num_workers="$DATALOADER_NUM_WORKERS" \
-    --state_noise_snr=40 \
     --image_aug \
     --report_to="$REPORT_TO" \
     --probe_period=0 \
     --checkpoints_total_limit=1
+
+#     --state_noise_snr=40 \
