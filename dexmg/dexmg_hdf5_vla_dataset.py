@@ -12,6 +12,15 @@ get_item() 契约同前几版，唯一变化是 state/actions 现在共用同一
 M = self.state_dim = self.action_dim = schema.dim（因为 Dexora 实例化
 RDTRunner 时用 action_dim=config["common"]["state_dim"]，两者天生是
 同一个数字）。
+
+本版本新增：对齐 dataset_robocasa.py 里 DexmgDataset 的 hdf5_file_video
+机制 —— 训练时可以从单独的、分辨率更高的 hdf5 文件里读取相机图像，而不是
+只用原始 demo hdf5（通常只存了 84x84 的小图）。分辨率通过 video_res 参数
+（或环境变量 DEXMG_VIDEO_RESOLUTION）指定，默认 "84x84" 即不启用、行为与
+之前完全一致。启用后，图像会从
+    {dataset_root}/videos_{video_res}/{原hdf5文件名去掉.hdf5}_videos.hdf5
+读取，该文件内部结构（data/{ep}/obs/{key}）与原 demo hdf5 保持一致，只是
+图像分辨率不同。
 """
 
 from __future__ import annotations
@@ -65,12 +74,37 @@ class _SingleDexmgReader:
         frame_stack: int,
         filter_key: Optional[str],
         image_shape=(224, 224, 3),
+        video_res: Optional[str] = None,
     ):
         self.hdf5_path = hdf5_path
         self.cfg = cfg
         self.schema = schema
         self.image_shape = image_shape
         self.cam_map = build_camera_key_map(cfg)
+
+        # ------------------------------------------------------------------
+        # 高分辨率视频 hdf5（对齐 dataset_robocasa.py 的 DexmgDataset.hdf5_file_video）
+        #
+        # video_res 优先取构造参数，其次取环境变量 DEXMG_VIDEO_RESOLUTION，默认
+        # "84x84"（即不启用，图像仍从原始 demo hdf5 读取，行为与之前完全一致）。
+        # 启用时，图像观测改为从同目录下 videos_{video_res}/ 子目录里的独立 hdf5
+        # 文件读取，该文件内部结构（data/{ep}/obs/{key}）与原文件一致，只是分辨率
+        # 更高；state/action 等低维数据仍然从原始 demo hdf5（self._h5file）读取。
+        self.video_res = video_res or os.environ.get("DEXMG_VIDEO_RESOLUTION", "84x84")
+        self._h5file_video: Optional[h5py.File] = None
+        if self.video_res != "84x84":
+            hdf5_path_video = os.path.join(
+                os.path.dirname(hdf5_path),
+                f"videos_{self.video_res}",
+                os.path.basename(hdf5_path).replace(".hdf5", "_videos.hdf5"),
+            )
+            assert os.path.exists(hdf5_path_video), (
+                f"未找到分辨率 {self.video_res} 对应的视频 hdf5 文件: {hdf5_path_video}\n"
+                f"（对齐 dataset_robocasa.py 的 DexmgDataset：这个文件应由预处理脚本"
+                f"预先生成在 videos_{self.video_res}/ 目录下，文件名与原 demo hdf5 同名，"
+                f"仅将 .hdf5 后缀替换为 _videos.hdf5）"
+            )
+            self._h5file_video = h5py.File(hdf5_path_video, "r", swmr=True)
 
         # 注意：dexmimicgen 把 action 分量存在 data/{ep}/action_dict/{key} 下（不是
         # data/{ep}/{key} 顶层），而 robomimic SequenceDataset 内部（get_action_traj 等）
@@ -149,7 +183,10 @@ class _SingleDexmgReader:
         action_dict = self._read_action_dict(demo_id, frame_indices)
         unified_action, action_mask = build_unified_action(action_dict, self.cfg, self.schema)
 
-        obs_group = self._h5file[f"data/{demo_id}/obs"]
+        # 图像观测优先从高分辨率视频 hdf5 读取（若已启用）；未启用时（video_res
+        # == "84x84"）与之前一样直接从原始 demo hdf5 读取。
+        image_h5file = self._h5file_video if self._h5file_video is not None else self._h5file
+        obs_group = image_h5file[f"data/{demo_id}/obs"]
         cams = extract_camera_images(obs_group, frame_indices, self.cam_map, self.image_shape)
 
         item = {
@@ -179,7 +216,16 @@ class DexmgHDF5VLADataset:
         frame_stack: int = 1,
         image_shape=(224, 224, 3),
         schema_cache_dir: Optional[str] = None,
+        video_res: Optional[str] = None,
     ):
+        """
+        video_res: 相机图像的读取分辨率。None（默认）时读取环境变量
+            DEXMG_VIDEO_RESOLUTION，再默认为 "84x84"（不启用高分辨率视频，
+            直接从原始 demo hdf5 读图，行为与之前完全一致）。传入例如
+            "256x256" 时，会改从
+            {dataset_root}/videos_256x256/{hdf5文件名}_videos.hdf5 读取图像，
+            对齐 dataset_robocasa.py 里 DexmgDataset 的 hdf5_file_video 机制。
+        """
         self.dataset_root = dataset_root
         filter_keys = filter_keys or {}
         dataset_weights = dataset_weights or {}
@@ -205,6 +251,7 @@ class DexmgHDF5VLADataset:
                 frame_stack=frame_stack,
                 filter_key=filter_keys.get(hdf5_name),
                 image_shape=image_shape,
+                video_res=video_res,
             )
             self._readers.append(reader)
             self._weights.append(dataset_weights.get(hdf5_name, 1.0))
