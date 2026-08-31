@@ -15,7 +15,8 @@ import h5py
 # === 按你实际的模块路径改这里 ===
 from dexmg.dexmg_config import DATASET_CONFIGS
 from dexmg.dexmg_schema import build_schema
-from dexmg.dexmg_convert import build_unified_action, unified_action_to_env
+from dexmg.dexmg_convert import build_unified_action
+from dexmg.sim_eval_dexora_dexmg import unified_action_to_env, infer_gripper_widths
 
 # 来自 dexmimicgen 官方 generate_training_config.py 的 panda_action_config，
 # 顺序是 ground truth —— 每项 (action_dict 的 key, 该 key 的维度)
@@ -47,7 +48,7 @@ def build_ground_truth_vector(f, demo_id: str, frame_idx: int):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hdf5", required=True)
-    ap.add_argument("--dataset_name", default="two_arm_box_cleanup",
+    ap.add_argument("--dataset_name", default="two_arm_box_cleanup.hdf5",
                      help="要对应 dexmg_config.py 里 DATASET_CONFIGS 的 key")
     ap.add_argument("--demo_id", default="demo_0")
     ap.add_argument("--frame_idx", type=int, default=10)
@@ -58,7 +59,7 @@ def main():
     args = ap.parse_args()
 
     cfg = DATASET_CONFIGS[args.dataset_name]
-    schema = build_schema(dataset_root=None, cache_dir=None)  # 按实际签名调整
+    schema = build_schema(dataset_root='/home/mayuhang/datasets/dexmimicgen_datasets', cache_dir='/tmp')  # 按实际签名调整
 
     with h5py.File(args.hdf5, "r") as f:
         gt_vec, gt_layout = build_ground_truth_vector(f, args.demo_id, args.frame_idx)
@@ -68,8 +69,16 @@ def main():
             key: np.asarray(f[f"data/{args.demo_id}/action_dict/{key}"][args.frame_idx])
             for key, _ in PANDA_ACTION_KEYS_OFFICIAL
         }
+        # ``42`` is the padded *model* schema dimension, not the native env
+        # action dimension. Use the official raw vector width (24 for this
+        # Panda dataset), exactly as the simulator uses ``env.action_dim``.
+        native_action_dim = len(gt_vec)
+        gripper_widths = infer_gripper_widths(native_action_dim, cfg["embodiment_group"], schema)
         unified_action, action_mask = build_unified_action(action_dict, cfg, schema)
-        pipeline_vec = unified_action_to_env(unified_action, cfg)  # 按你实际签名调整
+        pipeline_vec = unified_action_to_env(
+            unified_action, cfg, schema, gripper_widths,
+            expected_action_dim=native_action_dim,
+        )
 
     print(f"ground truth dim = {len(gt_vec)}, pipeline output dim = {len(pipeline_vec)}")
     if len(gt_vec) != len(pipeline_vec):

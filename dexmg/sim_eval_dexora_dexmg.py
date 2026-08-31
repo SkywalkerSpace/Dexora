@@ -358,7 +358,8 @@ def infer_gripper_widths(env_action_dim: int, group: str, schema: Schema) -> Dic
 # =============================================================================
 
 def unified_action_to_env(unified_M: np.ndarray, cfg: DatasetConfig, schema: Schema,
-                           gripper_widths: Dict[str, int]) -> np.ndarray:
+                           gripper_widths: Dict[str, int],
+                           expected_action_dim: Optional[int] = None) -> np.ndarray:
     group = cfg["embodiment_group"]
 
     def _slot(name: str) -> np.ndarray:
@@ -394,6 +395,13 @@ def unified_action_to_env(unified_M: np.ndarray, cfg: DatasetConfig, schema: Sch
         raise ValueError(f"未知 embodiment_group: {group}")
 
     flat = np.concatenate([component_map[k] for k in cfg["action_keys"]], axis=-1)
+    if expected_action_dim is not None and flat.shape[-1] != expected_action_dim:
+        raise ValueError(
+            f"{cfg['dataset_name']}: converted action has dim={flat.shape[-1]}, "
+            f"but env expects {expected_action_dim}. Check gripper widths "
+            f"(got right={right_gripper_w}, left={left_gripper_w}) instead of "
+            "passing the padded unified schema dimension."
+        )
     return flat.astype(np.float32)
 
 
@@ -451,7 +459,14 @@ def rollout_episode(
             action_chunk = policy.get_action(policy_obs)  # [chunk_size, M]，仍是归一化+统一schema空间
             action_chunk = denormalize(action_chunk, stats[ds_name]["action"], normalize_mode)
             env_action_chunk = np.stack(
-                [unified_action_to_env(a, cfg, schema, gripper_widths) for a in action_chunk], axis=0
+                [
+                    unified_action_to_env(
+                        a, cfg, schema, gripper_widths,
+                        expected_action_dim=env.action_dim,
+                    )
+                    for a in action_chunk
+                ],
+                axis=0,
             )
             action_queue.push_chunk(env_action_chunk)
 
