@@ -43,7 +43,8 @@ def log_sample_res(
                 input_ids=batch["input_ids"],
                 attention_mask=lang_attn_mask
             )["last_hidden_state"].detach()
-            
+
+        rdt = accelerator.unwrap_model(rdt)
         pred_actions = rdt.predict_action(
             lang_tokens=text_embeds,
             lang_attn_mask=lang_attn_mask,
