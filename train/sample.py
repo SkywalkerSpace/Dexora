@@ -44,8 +44,8 @@ def log_sample_res(
                 attention_mask=lang_attn_mask
             )["last_hidden_state"].detach()
 
-        rdt = accelerator.unwrap_model(rdt)
-        pred_actions = rdt.predict_action(
+        raw_rdt = rdt.module if hasattr(rdt, "module") else rdt
+        pred_actions = raw_rdt.predict_action(
             lang_tokens=text_embeds,
             lang_attn_mask=lang_attn_mask,
             img_tokens=image_embeds,
