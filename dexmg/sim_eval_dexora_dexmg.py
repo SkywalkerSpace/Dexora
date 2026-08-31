@@ -552,7 +552,11 @@ def main():
     for dataset_hdf5 in dataset_hdf5_list:
         print(f"\n{'=' * 70}\n>>> {dataset_hdf5}\n{'=' * 70}")
 
-        cfg = get_dataset_config(dataset_hdf5)
+        try:
+            cfg = get_dataset_config(dataset_hdf5)
+        except KeyError as e:
+            print(f"[跳过] {dataset_hdf5} 里没有对应的 dexmg_config.py 配置: {e}")
+            continue
         env_name, recorded_controller_configs = load_recorded_env_config(dataset_hdf5)
 
         # 相机名：cfg["image_keys"] 已经是完整 obs key（含 "_image" 后缀），
