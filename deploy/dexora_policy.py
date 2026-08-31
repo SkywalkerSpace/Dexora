@@ -128,7 +128,11 @@ class DexoraPolicy:
         n_params = sum(p.numel() for p in self.policy.parameters())
         logging.info(f"[DexoraPolicy] policy params = {n_params/1e6:.1f}M")
 
-        # Static action mask (all dims active for the 36-DoF embodiment).
+        # Defaults for the real-robot embodiment. DexMG simulation overrides
+        # these independently because state and action valid dimensions differ.
+        self._state_mask = torch.ones(
+            (1, 1, self.cfg.state_dim), device=self.device, dtype=self.cfg.dtype
+        )
         self._action_mask = torch.ones(
             (1, 1, self.cfg.state_dim), device=self.device, dtype=self.cfg.dtype
         )
@@ -178,6 +182,7 @@ class DexoraPolicy:
             lang_attn_mask=lang_mask,
             img_tokens=img_tokens,
             state_tokens=state,
+            state_mask=self._state_mask,
             action_mask=self._action_mask,
             ctrl_freqs=ctrl_freqs,
         )  # [1, chunk_size, state_dim]

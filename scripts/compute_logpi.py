@@ -153,12 +153,14 @@ def compute_denoising_residual_energy(model, batch_data, num_noise_steps, vision
     img_tokens = batch_data.get('images')  # Use 'images' key from collated batch
     state_tokens = batch_data.get('states')  # [B, 1, state_dim]
     action_gt = batch_data.get('actions')  # [B, horizon, action_dim]
-    action_mask = batch_data.get('state_elem_mask')  # [B, action_dim] - use state_elem_mask
+    state_mask = batch_data.get('state_elem_mask')
+    action_mask = batch_data.get('action_elem_mask', state_mask)
     ctrl_freqs = batch_data.get('ctrl_freqs')  # [B]
     
     # Assert all required data is present
     assert state_tokens is not None, "state_tokens is required but got None"
     assert action_gt is not None, "action_gt is required but got None"
+    assert state_mask is not None, "state_mask is required but got None"
     assert action_mask is not None, "action_mask is required but got None"
     assert ctrl_freqs is not None, "ctrl_freqs is required but got None"
     assert lang_tokens is not None, "lang_tokens is required but got None"
@@ -209,6 +211,7 @@ def compute_denoising_residual_energy(model, batch_data, num_noise_steps, vision
     img_tokens = img_tokens.to(device, dtype=img_ad_dtype)
     state_tokens = state_tokens.to(device, dtype=state_ad_dtype)
     action_gt = action_gt.to(device, dtype=state_ad_dtype)
+    state_mask = state_mask.to(device, dtype=state_ad_dtype)
     action_mask = action_mask.to(device, dtype=state_ad_dtype)
     ctrl_freqs = ctrl_freqs.to(device, dtype=core_dtype)
     # lang_attn_mask must be boolean and on the same device for fused attention
@@ -218,7 +221,9 @@ def compute_denoising_residual_energy(model, batch_data, num_noise_steps, vision
         lang_attn_mask = lang_attn_mask.to(device)
     t3 = time.perf_counter()
 
-    # Expand action_mask to correct dimensions
+    # Expand masks to correct dimensions.
+    if state_mask.dim() == 2:
+        state_mask = state_mask.unsqueeze(1)
     if action_mask.dim() == 2:
         action_mask = action_mask.unsqueeze(1)  # [B, action_dim] -> [B, 1, action_dim]
     
@@ -237,15 +242,18 @@ def compute_denoising_residual_energy(model, batch_data, num_noise_steps, vision
             timesteps = torch.randint(0, model.num_train_timesteps, (batch_size,), device=device).long()
             
             # Sample noise
-            noise = torch.randn_like(action_gt)
+            action_valid = action_mask.expand(-1, action_gt.shape[1], -1)
+            noise = torch.randn_like(action_gt) * action_valid
             
             # Add noise to actions
-            noisy_actions = model.noise_scheduler.add_noise(action_gt, noise, timesteps)
+            noisy_actions = model.noise_scheduler.add_noise(
+                action_gt * action_valid, noise, timesteps,
+            ) * action_valid
             
             # Prepare input sequence (following RDTRunner.compute_loss logic)
-            state_action_traj = torch.cat([state_tokens, noisy_actions], dim=1)
-            action_mask_expanded = action_mask.expand(-1, state_action_traj.shape[1], -1)
-            state_action_traj = torch.cat([state_action_traj, action_mask_expanded], dim=2)
+            state_token = torch.cat([state_tokens, state_mask], dim=2)
+            action_token = torch.cat([noisy_actions, action_valid], dim=2)
+            state_action_traj = torch.cat([state_token, action_token], dim=1)
             
             # Adapt conditions
             lang_cond, img_cond, state_action_traj = model.adapt_conditions(
@@ -274,7 +282,8 @@ def compute_denoising_residual_energy(model, batch_data, num_noise_steps, vision
                 raise ValueError(f"Unknown prediction type: {model.prediction_type}")
             
             # Compute MSE per sample (not averaged across batch)
-            mse_per_sample = torch.mean((pred_noise - target) ** 2, dim=(1, 2))  # [B]
+            residual_sq = (pred_noise - target).float().square() * action_valid
+            mse_per_sample = residual_sq.sum(dim=(1, 2)) / action_valid.sum(dim=(1, 2)).clamp_min(1.0)
             
             # Accumulate energy (negative log probability)
             total_energy += mse_per_sample
@@ -505,6 +514,10 @@ def main():
                 data['states'] = data.pop('state')
             if 'state_indicator' in data:
                 data['state_elem_mask'] = data.pop('state_indicator')
+            if 'action_mask' in data:
+                data['action_elem_mask'] = data.pop('action_mask')
+            elif 'state_elem_mask' in data:
+                data['action_elem_mask'] = data['state_elem_mask']
             if 'lang_embed' not in data and 'input_ids' not in data:
                 data['lang_embed'] = torch.zeros(1, 1024)
 

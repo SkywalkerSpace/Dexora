@@ -100,6 +100,7 @@ def main():
             states = batch["states"].to(DEVICE, dtype=DTYPE)[:, -1:, :]
             actions_gt = batch["actions"].to(DEVICE, dtype=torch.float32)
             state_elem_mask = batch["state_elem_mask"].to(DEVICE, dtype=DTYPE)
+            action_elem_mask = batch["action_elem_mask"].to(DEVICE, dtype=DTYPE)
             ctrl_freqs = batch["ctrl_freqs"].to(DEVICE)
             lang_attn_mask = batch["lang_attn_mask"].to(DEVICE)
 
@@ -120,7 +121,8 @@ def main():
                 lang_attn_mask=lang_attn_mask,
                 img_tokens=image_embeds,
                 state_tokens=states,
-                action_mask=state_elem_mask.unsqueeze(1),
+                state_mask=state_elem_mask.unsqueeze(1),
+                action_mask=action_elem_mask.unsqueeze(1),
                 ctrl_freqs=ctrl_freqs,
             ).float()
 
@@ -140,7 +142,8 @@ def main():
                 img_tokens=image_embeds,
                 state_tokens=states,
                 action_gt=actions_gt.to(dtype=DTYPE),
-                action_mask=state_elem_mask.unsqueeze(1),
+                state_mask=state_elem_mask.unsqueeze(1),
+                action_mask=action_elem_mask.unsqueeze(1),
                 ctrl_freqs=ctrl_freqs,
             )
             print(f"compute_loss (training-style, single-step eps MSE): {train_style_loss.item():.6f}")
@@ -161,7 +164,8 @@ def main():
                 lang_attn_mask=lang_attn_mask,
                 img_tokens=image_embeds,
                 state_tokens=states,
-                action_mask=state_elem_mask.unsqueeze(1),
+                state_mask=state_elem_mask.unsqueeze(1),
+                action_mask=action_elem_mask.unsqueeze(1),
                 ctrl_freqs=ctrl_freqs,
             ).float()
             rdt.noise_scheduler_sample = orig_scheduler

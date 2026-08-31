@@ -32,6 +32,28 @@ class TestUnweighted:
         assert loss.item() == pytest.approx(0.0)
         assert info["per_sample_mse_max"].item() == pytest.approx(0.0)
 
+    def test_element_mask_ignores_padded_action_dimensions(self):
+        """Errors in padded DoFs must not affect the policy objective."""
+        pred = torch.tensor([[[1.0, 2.0, 100.0, -100.0]]])
+        target = torch.tensor([[[0.0, 0.0, 0.0, 0.0]]])
+        mask = torch.tensor([[[1.0, 1.0, 0.0, 0.0]]])
+        loss, _ = weighted_mse_loss(pred, target, element_mask=mask)
+        assert loss.item() == pytest.approx((1.0 + 4.0) / 2.0)
+
+    def test_element_mask_normalizes_each_sample_by_its_valid_dims(self):
+        """Mixed embodiments must contribute one per-sample loss each."""
+        pred = torch.tensor([
+            [[2.0, 0.0, 0.0, 0.0]],  # valid mse = 4 over one dim
+            [[2.0, 2.0, 2.0, 2.0]],  # valid mse = 4 over four dims
+        ])
+        target = torch.zeros_like(pred)
+        mask = torch.tensor([
+            [[1.0, 0.0, 0.0, 0.0]],
+            [[1.0, 1.0, 1.0, 1.0]],
+        ])
+        loss, _ = weighted_mse_loss(pred, target, element_mask=mask)
+        assert loss.item() == pytest.approx(4.0)
+
 
 class TestWeighted:
     def test_uniform_weights_equal_unweighted(self):

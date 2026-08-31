@@ -116,6 +116,7 @@ def weighted_mse_loss(
     pred: torch.Tensor,
     target: torch.Tensor,
     sample_weights: Optional[torch.Tensor] = None,
+    element_mask: Optional[torch.Tensor] = None,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """
     Per-sample weighted MSE that implements Dexora Eq.(8).
@@ -132,6 +133,9 @@ def weighted_mse_loss(
         target:         ``(B, ...)`` matching ground truth.
         sample_weights: ``(B,)`` non-negative weights. If ``None``, behaves
             exactly like ``F.mse_loss(pred, target)``.
+        element_mask: Optional mask broadcastable to ``pred``. Each sample's
+            MSE is averaged over its valid elements only. This is required for
+            mixed-embodiment batches with padded action dimensions.
 
     Returns:
         ``(loss, info)`` where ``info`` contains diagnostic tensors:
@@ -143,7 +147,23 @@ def weighted_mse_loss(
     )
 
     diff_sq = (pred.float() - target.float()) ** 2  # (B, ...)
-    if diff_sq.ndim == 1:
+    if element_mask is not None:
+        try:
+            mask = torch.broadcast_to(
+                element_mask.to(device=diff_sq.device, dtype=diff_sq.dtype),
+                diff_sq.shape,
+            )
+        except RuntimeError as exc:
+            raise ValueError(
+                f"element_mask shape {tuple(element_mask.shape)} is not "
+                f"broadcastable to prediction shape {tuple(pred.shape)}"
+            ) from exc
+        reduce_dims = tuple(range(1, diff_sq.ndim))
+        if reduce_dims:
+            per_sample_mse = (diff_sq * mask).sum(dim=reduce_dims) / mask.sum(dim=reduce_dims).clamp_min(1.0)
+        else:
+            per_sample_mse = diff_sq * mask
+    elif diff_sq.ndim == 1:
         per_sample_mse = diff_sq
     else:
         per_sample_mse = diff_sq.mean(dim=tuple(range(1, diff_sq.ndim)))  # (B,)

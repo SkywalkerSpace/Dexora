@@ -141,6 +141,10 @@ class RDTRunner(
             size=(state_traj.shape[0], self.pred_horizon, self.action_dim), 
             dtype=dtype, device=device)
         action_mask = action_mask.expand(-1, self.pred_horizon, -1)
+        # Padded action dimensions must remain identically zero throughout
+        # diffusion; otherwise they inject meaningless noise into the action
+        # tokens despite not representing a controllable DoF.
+        noisy_action = noisy_action * action_mask
     
         # Set step values
         self.noise_scheduler_sample.set_timesteps(self.num_inference_timesteps)
@@ -159,7 +163,7 @@ class RDTRunner(
             # Compute previous actions: x_t -> x_t-1
             noisy_action = self.noise_scheduler_sample.step(
                 model_output, t, noisy_action).prev_sample
-            noisy_action = noisy_action.to(state_traj.dtype)
+            noisy_action = noisy_action.to(state_traj.dtype) * action_mask
         
         # Finally apply the action mask to mask invalid action dimensions
         noisy_action = noisy_action * action_mask
@@ -168,7 +172,8 @@ class RDTRunner(
     
     # ========= Train  ============
     def compute_loss(self, lang_tokens, lang_attn_mask, img_tokens,
-                     state_tokens, action_gt, action_mask, ctrl_freqs,
+                     state_tokens, action_gt, state_mask=None, action_mask=None,
+                     ctrl_freqs=None,
                      sample_weights=None,
                      return_dict: bool = False,
                     ):
@@ -179,7 +184,10 @@ class RDTRunner(
         img_tokens: (batch_size, img_len, img_token_dim)
         state_tokens: (batch_size, 1, state_token_dim)
         action_gt: (batch_size, horizon, state_token_dim), ground-truth actions for supervision
-        action_mask: (batch_size, 1, state_token_dim), a 0-1 **float** tensor.
+        state_mask: (batch_size, 1, state_token_dim), valid proprioception
+            dimensions. If omitted, ``action_mask`` is used for backwards
+            compatibility with old callers/checkpoints.
+        action_mask: (batch_size, 1, action_dim), valid action dimensions.
         ctrl_freqs: (batch_size,), control frequency for each sample.
         sample_weights: Optional (batch_size,) float tensor with per-sample
             weights w_i. When provided, implements the Dexora data-quality-aware
@@ -191,13 +199,20 @@ class RDTRunner(
 
         return: loss_value (scalar tensor) [, info_dict]
         '''
+        if action_mask is None:
+            raise ValueError("action_mask is required")
+        if state_mask is None:
+            state_mask = action_mask
+        if ctrl_freqs is None:
+            raise ValueError("ctrl_freqs is required")
+
         batch_size = lang_tokens.shape[0]
         device = lang_tokens.device
 
+        action_valid = action_mask.expand(-1, action_gt.shape[1], -1)
+
         # Sample noise that we'll add to the actions
-        noise = torch.randn(
-            action_gt.shape, dtype=action_gt.dtype, device=device
-        )
+        noise = torch.randn(action_gt.shape, dtype=action_gt.dtype, device=device) * action_valid
         # Sample random diffusion timesteps
         timesteps = torch.randint(
             0, self.num_train_timesteps,
@@ -206,13 +221,13 @@ class RDTRunner(
         # Add noise to the clean actions according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
         noisy_action = self.noise_scheduler.add_noise(
-            action_gt, noise, timesteps)
+            action_gt * action_valid, noise, timesteps) * action_valid
 
-        # Concatenate the state and action tokens to form the input sequence
-        state_action_traj = torch.cat([state_tokens, noisy_action], dim=1)
-        # Append the action mask to the input sequence
-        action_mask = action_mask.expand(-1, state_action_traj.shape[1], -1)
-        state_action_traj = torch.cat([state_action_traj, action_mask], dim=2)
+        # State and action live in the same padded 42-D space but have
+        # different valid dimensions. They therefore need distinct indicators.
+        state_token = torch.cat([state_tokens, state_mask], dim=2)
+        action_token = torch.cat([noisy_action, action_valid], dim=2)
+        state_action_traj = torch.cat([state_token, action_token], dim=1)
         # Align the dimension with the hidden size
         lang_cond, img_cond, state_action_traj = self.adapt_conditions(
             lang_tokens, img_tokens, state_action_traj)
@@ -230,7 +245,9 @@ class RDTRunner(
             raise ValueError(f"Unsupported prediction type {pred_type}")
 
         # Per-sample MSE + optional Eq.(8) weighting. See models/sample_weighting.py.
-        loss, info = weighted_mse_loss(pred, target, sample_weights=sample_weights)
+        loss, info = weighted_mse_loss(
+            pred, target, sample_weights=sample_weights, element_mask=action_valid,
+        )
         loss = loss.to(pred.dtype)
 
         if return_dict:
@@ -239,21 +256,31 @@ class RDTRunner(
     
     # ========= Inference  ============
     def predict_action(self, lang_tokens, lang_attn_mask, img_tokens, state_tokens,
-                       action_mask, ctrl_freqs):
+                       state_mask=None, action_mask=None, ctrl_freqs=None):
         '''
         lang_tokens: (batch_size, lang_len, lang_token_dim)
         lang_attn_mask: (batch_size, lang_len), a mask for valid language tokens,
             which should be True-False bool tensor.
         img_tokens: (batch_size, img_len, img_token_dim)
         state_tokens: (batch_size, 1, state_token_dim)
+        state_mask: (batch_size, 1, state_token_dim), valid proprioception
+            dimensions. Defaults to ``action_mask`` for legacy callers.
         action_mask: (batch_size, 1, action_dim),
             which should be a 0-1 **float** tensor.
         ctrl_freqs: (batch_size,), control frequency for each sample.
         
         return: (batch_size, horizon, action_dim), predicted action sequence
         '''
-        # Prepare the state and conditions
-        state_tokens = torch.cat([state_tokens, action_mask], dim=2)
+        if action_mask is None:
+            raise ValueError("action_mask is required")
+        if state_mask is None:
+            state_mask = action_mask
+        if ctrl_freqs is None:
+            raise ValueError("ctrl_freqs is required")
+
+        # Prepare the state and conditions. Do not reuse action_mask here:
+        # gripper state and gripper action have different real widths.
+        state_tokens = torch.cat([state_tokens, state_mask], dim=2)
         lang_cond, img_cond, state_traj = self.adapt_conditions(
             lang_tokens, img_tokens, state_tokens)
         

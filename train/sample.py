@@ -30,6 +30,7 @@ def log_sample_res(
         states = states[:, -1:, :]
         actions = batch["actions"].to(dtype=weight_dtype)
         state_elem_mask = batch["state_elem_mask"].to(dtype=weight_dtype)
+        action_elem_mask = batch["action_elem_mask"].to(dtype=weight_dtype)
             
         batch_size, _, C, H, W = images.shape
         image_embeds = vision_encoder(images.reshape(-1, C, H, W)).detach()
@@ -48,21 +49,22 @@ def log_sample_res(
             lang_attn_mask=lang_attn_mask,
             img_tokens=image_embeds,
             state_tokens=states,
-            action_mask=state_elem_mask.unsqueeze(1),
+            state_mask=state_elem_mask.unsqueeze(1),
+            action_mask=action_elem_mask.unsqueeze(1),
             ctrl_freqs=ctrl_freqs
         )
         
         num_steps = pred_actions.shape[1]
-        expanded_state_elem_mask = state_elem_mask.unsqueeze(1).tile((1, num_steps, 1)).float()
+        expanded_action_elem_mask = action_elem_mask.unsqueeze(1).tile((1, num_steps, 1)).float()
         expanded_state_norm = state_norm.unsqueeze(1).tile((1, num_steps, 1)).float()
         
         loss = F.mse_loss(pred_actions, actions, reduction='none').float()
         
-        mse_loss_per_entry = ((loss * expanded_state_elem_mask).reshape((batch_size, -1)).sum(1)
-                            / expanded_state_elem_mask.reshape((batch_size, -1)).sum(1))
+        mse_loss_per_entry = ((loss * expanded_action_elem_mask).reshape((batch_size, -1)).sum(1)
+                            / expanded_action_elem_mask.reshape((batch_size, -1)).sum(1))
         l2_loss_per_entry = loss.sqrt() / (expanded_state_norm + 1e-3)
-        l2_loss_per_entry = ((l2_loss_per_entry * expanded_state_elem_mask).reshape((batch_size, -1)).sum(1)
-                        / expanded_state_elem_mask.reshape((batch_size, -1)).sum(1))
+        l2_loss_per_entry = ((l2_loss_per_entry * expanded_action_elem_mask).reshape((batch_size, -1)).sum(1)
+                        / expanded_action_elem_mask.reshape((batch_size, -1)).sum(1))
 
         dataset_indices, mse_losses, l2_losses = accelerator.gather_for_metrics(
             (torch.LongTensor(data_indices).to(device=pred_actions.device), 
@@ -76,12 +78,12 @@ def log_sample_res(
                     loss_for_log[loss_name] += loss_tensor.item()
                     loss_counter[loss_name] += 1
         
-        mse_loss = (loss * expanded_state_elem_mask).sum() / expanded_state_elem_mask.sum()
+        mse_loss = (loss * expanded_action_elem_mask).sum() / expanded_action_elem_mask.sum()
         mse_loss_scaler = accelerator.gather(mse_loss).mean().item()
         loss_for_log["overall_avg_sample_mse"] += mse_loss_scaler
         
         l2_loss = loss.sqrt() / (expanded_state_norm + 1e-3)
-        l2_loss = (l2_loss * expanded_state_elem_mask).sum() / expanded_state_elem_mask.sum()
+        l2_loss = (l2_loss * expanded_action_elem_mask).sum() / expanded_action_elem_mask.sum()
         l2_loss_scaler = accelerator.gather(l2_loss).mean().item()
         loss_for_log["overall_avg_sample_l2err"] += l2_loss_scaler
 

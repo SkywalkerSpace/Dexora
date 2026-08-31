@@ -321,6 +321,10 @@ class VLAConsumerDataset(Dataset):
                     states = res['state']
                     actions = res['actions']
                     state_elem_mask = res['state_indicator']
+                    # DexMG state and action have different valid dimensions
+                    # in the shared padded schema. Legacy backends only expose
+                    # one indicator, for which the old behaviour is retained.
+                    action_elem_mask = res.get('action_mask', state_elem_mask)
                     image_metas = [
                         res['cam_high'], res['cam_high_mask'],
                         res['cam_right_wrist'], res['cam_right_wrist_mask'],
@@ -335,6 +339,7 @@ class VLAConsumerDataset(Dataset):
                     (content, _, states, _, actions, _, 
                     state_elem_mask, *image_metas, 
                     state_std, state_mean, state_norm) = self._safe_load(index)
+                    action_elem_mask = state_elem_mask
                 
                 data_dict = {}
                 data_dict['dataset_name'] = content['dataset_name']
@@ -354,6 +359,9 @@ class VLAConsumerDataset(Dataset):
                 data_dict["actions"] = actions
                 data_dict["state_elem_mask"] = state_elem_mask \
                     if random.random() > self.cond_mask_prob else np.zeros_like(state_elem_mask)
+                # Action validity is structural metadata, not a condition: it
+                # must never be dropped by classifier-free condition masking.
+                data_dict["action_elem_mask"] = action_elem_mask
                 
                 # Stat for the episode that the step belongs to 
                 data_dict["state_norm"] = state_norm
@@ -500,6 +508,7 @@ class DataCollatorForVLAConsumerDataset(object):
             "states": [],
             "actions": [],
             "state_elem_mask": [],
+            "action_elem_mask": [],
             "state_norm": [],
             "action_norm": [],
             "images": [],
@@ -514,7 +523,7 @@ class DataCollatorForVLAConsumerDataset(object):
             # Convert all the numpy arrays to tensor
             keys_to_check = [
                 'states', 'actions',
-                'state_elem_mask', 'state_norm', 'action_norm'
+                'state_elem_mask', 'action_elem_mask', 'state_norm', 'action_norm'
             ]
             for key in keys_to_check:
                 if isinstance(instance[key], torch.Tensor):
@@ -544,7 +553,7 @@ class DataCollatorForVLAConsumerDataset(object):
         
         keys_to_stack = [
             'states', 'actions',
-            'state_elem_mask', 'state_norm', 'action_norm',
+            'state_elem_mask', 'action_elem_mask', 'state_norm', 'action_norm',
             "images"
         ]
         for key in keys_to_stack:

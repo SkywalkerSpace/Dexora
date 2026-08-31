@@ -405,6 +405,7 @@ def train_posttrain(args, logger):
                 states = states[:, -1:, :]  # last proprio frame as the conditioning state
                 actions = batch["actions"].to(dtype=weight_dtype)
                 state_elem_mask = batch["state_elem_mask"].to(dtype=weight_dtype)
+                action_elem_mask = batch["action_elem_mask"].to(dtype=weight_dtype)
                 ctrl_freqs = batch["ctrl_freqs"]
 
                 with torch.no_grad():
@@ -457,6 +458,7 @@ def train_posttrain(args, logger):
                         ).view(-1)
 
                 state_elem_mask = state_elem_mask.unsqueeze(1)
+                action_elem_mask = action_elem_mask.unsqueeze(1)
 
                 loss, info = rdt(
                     lang_tokens=text_embeds,
@@ -464,7 +466,8 @@ def train_posttrain(args, logger):
                     img_tokens=image_embeds,
                     state_tokens=states,
                     action_gt=actions,
-                    action_mask=state_elem_mask,
+                    state_mask=state_elem_mask,
+                    action_mask=action_elem_mask,
                     ctrl_freqs=ctrl_freqs,
                     sample_weights=sample_weights,
                     return_dict=True,

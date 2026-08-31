@@ -439,6 +439,7 @@ def train(args, logger):
                 states = states[:, -1:, :]
                 actions = batch["actions"].to(dtype=weight_dtype)
                 state_elem_mask = batch["state_elem_mask"].to(dtype=weight_dtype)
+                action_elem_mask = batch["action_elem_mask"].to(dtype=weight_dtype)
                 ctrl_freqs = batch["ctrl_freqs"]
                 # 归一化（RMS scale-only，和之前 compute_dexmg_stats.py 里 norm 字段的定义一致）
                 state_norm = batch["state_norm"].to(dtype=weight_dtype).unsqueeze(1)    # (B, 1, D)
@@ -472,13 +473,15 @@ def train(args, logger):
                         )["last_hidden_state"].detach()
                 
                 state_elem_mask = state_elem_mask.unsqueeze(1)
+                action_elem_mask = action_elem_mask.unsqueeze(1)
                 loss = rdt(
                     lang_tokens=text_embeds,
                     lang_attn_mask=lang_attn_mask,
                     img_tokens=image_embeds,
                     state_tokens=states,
                     action_gt=actions,
-                    action_mask=state_elem_mask,
+                    state_mask=state_elem_mask,
+                    action_mask=action_elem_mask,
                     ctrl_freqs=ctrl_freqs
                 )
 
