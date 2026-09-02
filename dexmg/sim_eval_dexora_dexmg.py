@@ -594,6 +594,9 @@ def main():
 
         state_mask = schema.state_group_mask(cfg["embodiment_group"])
         action_mask = schema.action_group_mask(cfg["embodiment_group"])
+        print('----- -----')
+        print('sim state_mask:', state_mask)
+        print('sim action_mask:', action_mask)
         policy._state_mask = (
             __import__("torch").from_numpy(state_mask)[None, None, :]
             .to(policy.device, dtype=policy.cfg.dtype)
