@@ -480,6 +480,7 @@ def train(args, logger):
                     debug_mask = action_elem_mask[0, 0]
                     print(
                         f"[mask-debug] step={global_step} "
+                        f"mask={debug_mask.detach().cpu().tolist()} "
                         f"action_mask[9:15]={debug_mask[9:15].detach().cpu().tolist()} "
                         f"action_mask[30:36]={debug_mask[30:36].detach().cpu().tolist()}"
                     )
