@@ -232,6 +232,11 @@ def build_images_for_policy(obs: Dict[str, np.ndarray], cfg: DatasetConfig) -> D
     return images
 
 
+def _slot_slice(unified_action: np.ndarray, schema: Schema, slot_name: str) -> np.ndarray:
+    slot = schema.slots[slot_name]
+    return unified_action[..., slot.offset:slot.offset + slot.dim]
+
+
 def _gripper_slice_for_group(unified_action: np.ndarray, schema: Schema, group: str) -> Tuple[np.ndarray, np.ndarray]:
     right_w = int(schema.action_real_width[group]["right_gripper"])
     left_w = int(schema.action_real_width[group]["left_gripper"])
@@ -349,10 +354,22 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
 
     pred_traj = []
     gt_traj = []
+    gt_arm_right_pos = []
+    gt_arm_right_rot6d = []
+    gt_arm_left_pos = []
+    gt_arm_left_rot6d = []
     gt_finger_right = []
     gt_finger_left = []
+    pred_arm_right_pos = []
+    pred_arm_right_rot6d = []
+    pred_arm_left_pos = []
+    pred_arm_left_rot6d = []
     pred_finger_right = []
     pred_finger_left = []
+    pred_arm_right_pos_norm = []
+    pred_arm_right_rot6d_norm = []
+    pred_arm_left_pos_norm = []
+    pred_arm_left_rot6d_norm = []
     pred_finger_right_norm = []
     pred_finger_left_norm = []
 
@@ -376,7 +393,6 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         action_chunk = policy.get_action(policy_obs)
         pred_action_norm = np.asarray(action_chunk[0], dtype=np.float32)
         pred_action = denormalize(pred_action_norm, stats_entry["action"], args.normalize_mode)
-        # Use the first predicted chunk element as the current-step action.
         pred_action = pred_action.astype(np.float32)
         pred_traj.append(pred_action)
 
@@ -384,22 +400,55 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         gt_action = build_unified_action(action_t, cfg, schema)[0].reshape(-1)
         gt_traj.append(gt_action)
 
+        gt_arm_right_pos.append(_slot_slice(gt_action, schema, "right_arm_pos").reshape(-1))
+        gt_arm_right_rot6d.append(_slot_slice(gt_action, schema, "right_arm_rot6d").reshape(-1))
+        gt_arm_left_pos.append(_slot_slice(gt_action, schema, "left_arm_pos").reshape(-1))
+        gt_arm_left_rot6d.append(_slot_slice(gt_action, schema, "left_arm_rot6d").reshape(-1))
         g_right, g_left = _gripper_slice_for_group(gt_action, schema, cfg["embodiment_group"])
-        p_right, p_left = _gripper_slice_for_group(pred_action, schema, cfg["embodiment_group"])
-        p_right_norm, p_left_norm = _gripper_slice_for_group(pred_action_norm, schema, cfg["embodiment_group"])
         gt_finger_right.append(g_right.reshape(-1))
         gt_finger_left.append(g_left.reshape(-1))
+
+        pred_arm_right_pos.append(_slot_slice(pred_action, schema, "right_arm_pos").reshape(-1))
+        pred_arm_right_rot6d.append(_slot_slice(pred_action, schema, "right_arm_rot6d").reshape(-1))
+        pred_arm_left_pos.append(_slot_slice(pred_action, schema, "left_arm_pos").reshape(-1))
+        pred_arm_left_rot6d.append(_slot_slice(pred_action, schema, "left_arm_rot6d").reshape(-1))
+        p_right, p_left = _gripper_slice_for_group(pred_action, schema, cfg["embodiment_group"])
         pred_finger_right.append(p_right.reshape(-1))
         pred_finger_left.append(p_left.reshape(-1))
+
+        pred_arm_right_pos_norm.append(_slot_slice(pred_action_norm, schema, "right_arm_pos").reshape(-1))
+        pred_arm_right_rot6d_norm.append(_slot_slice(pred_action_norm, schema, "right_arm_rot6d").reshape(-1))
+        pred_arm_left_pos_norm.append(_slot_slice(pred_action_norm, schema, "left_arm_pos").reshape(-1))
+        pred_arm_left_rot6d_norm.append(_slot_slice(pred_action_norm, schema, "left_arm_rot6d").reshape(-1))
+        p_right_norm, p_left_norm = _gripper_slice_for_group(pred_action_norm, schema, cfg["embodiment_group"])
         pred_finger_right_norm.append(p_right_norm.reshape(-1))
         pred_finger_left_norm.append(p_left_norm.reshape(-1))
 
+    gt_arm_right_pos = np.stack(gt_arm_right_pos, axis=0)
+    gt_arm_right_rot6d = np.stack(gt_arm_right_rot6d, axis=0)
+    gt_arm_left_pos = np.stack(gt_arm_left_pos, axis=0)
+    gt_arm_left_rot6d = np.stack(gt_arm_left_rot6d, axis=0)
     gt_finger_right = np.stack(gt_finger_right, axis=0)
     gt_finger_left = np.stack(gt_finger_left, axis=0)
+    pred_arm_right_pos = np.stack(pred_arm_right_pos, axis=0)
+    pred_arm_right_rot6d = np.stack(pred_arm_right_rot6d, axis=0)
+    pred_arm_left_pos = np.stack(pred_arm_left_pos, axis=0)
+    pred_arm_left_rot6d = np.stack(pred_arm_left_rot6d, axis=0)
     pred_finger_right = np.stack(pred_finger_right, axis=0)
     pred_finger_left = np.stack(pred_finger_left, axis=0)
+    pred_arm_right_pos_norm = np.stack(pred_arm_right_pos_norm, axis=0)
+    pred_arm_right_rot6d_norm = np.stack(pred_arm_right_rot6d_norm, axis=0)
+    pred_arm_left_pos_norm = np.stack(pred_arm_left_pos_norm, axis=0)
+    pred_arm_left_rot6d_norm = np.stack(pred_arm_left_rot6d_norm, axis=0)
     pred_finger_right_norm = np.stack(pred_finger_right_norm, axis=0)
     pred_finger_left_norm = np.stack(pred_finger_left_norm, axis=0)
+
+    arm_norm_groups = [
+        ("right_arm_pos", gt_arm_right_pos, pred_arm_right_pos, pred_arm_right_pos_norm),
+        ("right_arm_rot6d", gt_arm_right_rot6d, pred_arm_right_rot6d, pred_arm_right_rot6d_norm),
+        ("left_arm_pos", gt_arm_left_pos, pred_arm_left_pos, pred_arm_left_pos_norm),
+        ("left_arm_rot6d", gt_arm_left_rot6d, pred_arm_left_rot6d, pred_arm_left_rot6d_norm),
+    ]
 
     print(f"[teacher_forcing] demo={demo_id} T={T} dataset={cfg['dataset_name']} group={cfg['embodiment_group']}")
     print(f"  state_dims={schema.dim} right_gripper_dim={gt_finger_right.shape[-1]} left_gripper_dim={gt_finger_left.shape[-1]}")
@@ -407,6 +456,12 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
           f"RMSE={np.sqrt(np.mean((pred_finger_right - gt_finger_right)**2)):.6f}")
     print(f"  overall left MAE={np.mean(np.abs(pred_finger_left - gt_finger_left)):.6f} "
           f"RMSE={np.sqrt(np.mean((pred_finger_left - gt_finger_left)**2)):.6f}")
+    for name, _, _, pred_norm_arr in arm_norm_groups:
+        abs_norm = np.abs(pred_norm_arr)
+        print(
+            f"  raw normalized {name}: abs_max={np.max(abs_norm):.3f}, mean_abs={np.mean(abs_norm):.3f}, "
+            f"p99={np.quantile(abs_norm, 0.99):.3f}, min={np.min(pred_norm_arr):.3f}, max={np.max(pred_norm_arr):.3f}"
+        )
     print(f"  raw normalized right_gripper[0:5] abs max={np.max(np.abs(pred_finger_right_norm[:, :5])):.3f}, "
           f"min={np.min(pred_finger_right_norm[:, :5]):.3f}, max={np.max(pred_finger_right_norm[:, :5]):.3f}")
     print(f"  raw normalized left_gripper[0:5] abs max={np.max(np.abs(pred_finger_left_norm[:, :5])):.3f}, "
@@ -426,10 +481,22 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         txt_path,
         demo_id,
         cfg,
+        gt_arm_right_pos,
+        pred_arm_right_pos,
+        gt_arm_right_rot6d,
+        pred_arm_right_rot6d,
+        gt_arm_left_pos,
+        pred_arm_left_pos,
+        gt_arm_left_rot6d,
+        pred_arm_left_rot6d,
         gt_finger_right,
         pred_finger_right,
         gt_finger_left,
         pred_finger_left,
+        pred_arm_right_pos_norm,
+        pred_arm_right_rot6d_norm,
+        pred_arm_left_pos_norm,
+        pred_arm_left_rot6d_norm,
         pred_finger_right_norm,
         pred_finger_left_norm,
     )
@@ -482,10 +549,22 @@ def _write_teacher_forcing_txt(
     out_path: str,
     demo_id: str,
     cfg: DatasetConfig,
+    gt_right_arm_pos: np.ndarray,
+    pred_right_arm_pos: np.ndarray,
+    gt_right_arm_rot6d: np.ndarray,
+    pred_right_arm_rot6d: np.ndarray,
+    gt_left_arm_pos: np.ndarray,
+    pred_left_arm_pos: np.ndarray,
+    gt_left_arm_rot6d: np.ndarray,
+    pred_left_arm_rot6d: np.ndarray,
     gt_right: np.ndarray,
     pred_right: np.ndarray,
     gt_left: np.ndarray,
     pred_left: np.ndarray,
+    pred_right_arm_pos_norm: np.ndarray,
+    pred_right_arm_rot6d_norm: np.ndarray,
+    pred_left_arm_pos_norm: np.ndarray,
+    pred_left_arm_rot6d_norm: np.ndarray,
     pred_right_norm: np.ndarray,
     pred_left_norm: np.ndarray,
 ) -> None:
@@ -498,10 +577,17 @@ def _write_teacher_forcing_txt(
         f.write(f"normalize_mode=rms\n")
         f.write(f"T={len(pred_right_norm)}\n\n")
 
-        for name, gt_arr, pred_arr, pred_norm_arr in [
+        arm_entries = [
+            ("right_arm_pos", gt_right_arm_pos, pred_right_arm_pos, pred_right_arm_pos_norm),
+            ("right_arm_rot6d", gt_right_arm_rot6d, pred_right_arm_rot6d, pred_right_arm_rot6d_norm),
+            ("left_arm_pos", gt_left_arm_pos, pred_left_arm_pos, pred_left_arm_pos_norm),
+            ("left_arm_rot6d", gt_left_arm_rot6d, pred_left_arm_rot6d, pred_left_arm_rot6d_norm),
             ("right_gripper", gt_right, pred_right, pred_right_norm),
             ("left_gripper", gt_left, pred_left, pred_left_norm),
-        ]:
+        ]
+        for name, gt_arr, pred_arr, pred_norm_arr in arm_entries:
+            if pred_norm_arr.size == 0:
+                continue
             f.write(f"== {name} (first {min(max_print, pred_norm_arr.shape[1])} dims in normalized space) ==\n")
             f.write("t\t")
             for j in range(min(max_print, pred_norm_arr.shape[1])):
@@ -519,7 +605,14 @@ def _write_teacher_forcing_txt(
             f.write("\n")
 
         f.write("== raw normalized extrema (first 5 dims only) ==\n")
-        for name, pred_norm_arr in [("right_gripper", pred_right_norm), ("left_gripper", pred_left_norm)]:
+        for name, pred_norm_arr in [
+            ("right_arm_pos", pred_right_arm_pos_norm),
+            ("right_arm_rot6d", pred_right_arm_rot6d_norm),
+            ("left_arm_pos", pred_left_arm_pos_norm),
+            ("left_arm_rot6d", pred_left_arm_rot6d_norm),
+            ("right_gripper", pred_right_norm),
+            ("left_gripper", pred_left_norm),
+        ]:
             first = pred_norm_arr[:, : min(max_print, pred_norm_arr.shape[1])]
             f.write(f"{name}: max_abs_norm={np.max(np.abs(first)):.6f}, min={np.min(first):.6f}, max={np.max(first):.6f}\n")
 

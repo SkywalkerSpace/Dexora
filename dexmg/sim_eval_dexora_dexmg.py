@@ -515,7 +515,7 @@ def main():
                          help="不填则用每个数据集在 dexmg_config.py 里的默认 lang")
     parser.add_argument("--n_rollouts", type=int, default=5)
     parser.add_argument("--horizon", type=int, default=400)
-    parser.add_argument("--chunk_size", type=int, default=32)
+    parser.add_argument("--chunk_size", type=int, default=16)
     parser.add_argument("--replan_interval", type=int, default=6)
     parser.add_argument("--video_dir", type=str, default="./eval_videos")
     parser.add_argument("--viz_camera", type=str, default="agentview")
