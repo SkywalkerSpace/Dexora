@@ -74,6 +74,10 @@ class RDTRunner(
             clip_sample=noise_scheduler_config['clip_sample'],
         )
 
+        print('----- -----')
+        print("train scheduler:", self.noise_scheduler.config)
+        print("sample scheduler:", self.noise_scheduler_sample.config)
+
         self.num_train_timesteps = noise_scheduler_config['num_train_timesteps']
         self.num_inference_timesteps = noise_scheduler_config['num_inference_timesteps']
         self.prediction_type = noise_scheduler_config['prediction_type']

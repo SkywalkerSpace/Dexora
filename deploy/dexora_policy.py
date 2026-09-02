@@ -136,6 +136,9 @@ class DexoraPolicy:
         self._action_mask = torch.ones(
             (1, 1, self.cfg.state_dim), device=self.device, dtype=self.cfg.dtype
         )
+        print('----- -----')
+        print('state_mask:', self._state_mask)
+        print('action_mask:', self._action_mask)
 
         # Cache last language embedding to avoid re-running T5 every step.
         self._cached_instruction: Optional[str] = None
