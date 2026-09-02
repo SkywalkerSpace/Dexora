@@ -168,7 +168,7 @@ class RDTRunner(
             valid_timesteps = all_timesteps[all_timesteps <= warm_start_t]
             if valid_timesteps.numel() == 0:
                 valid_timesteps = all_timesteps[:1]
-            self.noise_scheduler_sample.set_timesteps(valid_timesteps.tolist())
+            self.noise_scheduler_sample.timesteps = valid_timesteps.to(device=device)
             noisy_action = warm_start_action * action_mask
         else:
             noisy_action = torch.randn(

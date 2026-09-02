@@ -398,11 +398,11 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         if args.warm_start_t is not None:
             gt_action_norm = normalize(gt_action, stats_entry["action"], args.normalize_mode)
             gt_action_norm = np.asarray(gt_action_norm, dtype=np.float32)
-            gt_action_torch = torch.as_tensor(gt_action_norm, device=policy.device, dtype=policy.cfg.dtype)
+            gt_action_torch = torch.as_tensor(gt_action_norm, device=policy.device, dtype=torch.float32)
             gt_action_chunk = gt_action_torch[None, None, :].expand(
                 1, policy.policy.pred_horizon, -1
             )
-            noise = torch.randn_like(gt_action_chunk)
+            noise = torch.randn_like(gt_action_chunk, dtype=torch.float32)
             warm_start_t = torch.full(
                 (1,), int(args.warm_start_t), dtype=torch.long, device=policy.device
             )
@@ -410,7 +410,7 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
                 gt_action_chunk,
                 noise,
                 warm_start_t,
-            ).detach().cpu().numpy()
+            ).float().detach().cpu().numpy()
 
         action_chunk = policy.get_action(
             policy_obs,
