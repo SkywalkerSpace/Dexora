@@ -490,7 +490,8 @@ def train(args, logger):
                     params_to_clip = rdt.parameters()
                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
-                lr_scheduler.step()
+                if accelerator.sync_gradients:
+                    lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=args.set_grads_to_none)
             
             ema_model.step(accelerator.unwrap_model(rdt))

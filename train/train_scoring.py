@@ -561,7 +561,8 @@ def train_scoring_model(args, logger):
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(scoring_model.parameters(), args.max_grad_norm)
                 optimizer.step()
-                lr_scheduler.step()
+                if accelerator.sync_gradients:
+                    lr_scheduler.step()
                 optimizer.zero_grad()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
