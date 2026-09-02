@@ -510,7 +510,7 @@ def main():
     parser.add_argument("--model_config_path", type=str, default="configs/base_400m.yaml")
     parser.add_argument("--stats_file", type=str, default=None,
                          help="compute_dexmg_stats.py 生成的 dataset_statistics.json")
-    parser.add_argument("--normalize_mode", type=str, default="min_max", choices=["min_max", "mean_std", "rms"])
+    parser.add_argument("--normalize_mode", type=str, default="rms", choices=["min_max", "mean_std", "rms"])
     parser.add_argument("--instruction", type=str, default="",
                          help="不填则用每个数据集在 dexmg_config.py 里的默认 lang")
     parser.add_argument("--n_rollouts", type=int, default=5)
