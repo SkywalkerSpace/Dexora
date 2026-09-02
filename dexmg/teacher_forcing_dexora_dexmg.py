@@ -246,6 +246,8 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
     gt_finger_left = []
     pred_finger_right = []
     pred_finger_left = []
+    pred_finger_right_norm = []
+    pred_finger_left_norm = []
 
     for t in range(T):
         obs_t = {k: np.asarray(low_dim[k][t]) for k in cfg["low_dim_keys"]}
@@ -265,9 +267,10 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         }
 
         action_chunk = policy.get_action(policy_obs)
-        action_chunk = denormalize(action_chunk, stats_entry["action"], args.normalize_mode)
+        pred_action_norm = np.asarray(action_chunk[0], dtype=np.float32)
+        pred_action = denormalize(pred_action_norm, stats_entry["action"], args.normalize_mode)
         # Use the first predicted chunk element as the current-step action.
-        pred_action = action_chunk[0]
+        pred_action = pred_action.astype(np.float32)
         pred_traj.append(pred_action)
 
         action_t = {k: np.asarray(action_dict[k][t]) for k in cfg["action_keys"]}
@@ -276,15 +279,20 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
 
         g_right, g_left = _gripper_slice_for_group(gt_action, schema, cfg["embodiment_group"])
         p_right, p_left = _gripper_slice_for_group(pred_action, schema, cfg["embodiment_group"])
+        p_right_norm, p_left_norm = _gripper_slice_for_group(pred_action_norm, schema, cfg["embodiment_group"])
         gt_finger_right.append(g_right.reshape(-1))
         gt_finger_left.append(g_left.reshape(-1))
         pred_finger_right.append(p_right.reshape(-1))
         pred_finger_left.append(p_left.reshape(-1))
+        pred_finger_right_norm.append(p_right_norm.reshape(-1))
+        pred_finger_left_norm.append(p_left_norm.reshape(-1))
 
     gt_finger_right = np.stack(gt_finger_right, axis=0)
     gt_finger_left = np.stack(gt_finger_left, axis=0)
     pred_finger_right = np.stack(pred_finger_right, axis=0)
     pred_finger_left = np.stack(pred_finger_left, axis=0)
+    pred_finger_right_norm = np.stack(pred_finger_right_norm, axis=0)
+    pred_finger_left_norm = np.stack(pred_finger_left_norm, axis=0)
 
     print(f"[teacher_forcing] demo={demo_id} T={T} dataset={cfg['dataset_name']} group={cfg['embodiment_group']}")
     print(f"  state_dims={schema.dim} right_gripper_dim={gt_finger_right.shape[-1]} left_gripper_dim={gt_finger_left.shape[-1]}")
@@ -292,8 +300,13 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
           f"RMSE={np.sqrt(np.mean((pred_finger_right - gt_finger_right)**2)):.6f}")
     print(f"  overall left MAE={np.mean(np.abs(pred_finger_left - gt_finger_left)):.6f} "
           f"RMSE={np.sqrt(np.mean((pred_finger_left - gt_finger_left)**2)):.6f}")
+    print(f"  raw normalized right_gripper[0:5] abs max={np.max(np.abs(pred_finger_right_norm[:, :5])):.3f}, "
+          f"min={np.min(pred_finger_right_norm[:, :5]):.3f}, max={np.max(pred_finger_right_norm[:, :5]):.3f}")
+    print(f"  raw normalized left_gripper[0:5] abs max={np.max(np.abs(pred_finger_left_norm[:, :5])):.3f}, "
+          f"min={np.min(pred_finger_left_norm[:, :5]):.3f}, max={np.max(pred_finger_left_norm[:, :5]):.3f}")
 
     plot_path = os.path.join(args.output_dir, f"{cfg['dataset_name']}_{demo_id}_finger_teacher_forcing.png")
+    txt_path = os.path.join(args.output_dir, f"{cfg['dataset_name']}_{demo_id}_finger_teacher_forcing.txt")
     _plot_gripper_comparison(
         gt_finger_right,
         pred_finger_right,
@@ -302,7 +315,19 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         plot_path,
         demo_id,
     )
+    _write_teacher_forcing_txt(
+        txt_path,
+        demo_id,
+        cfg,
+        gt_finger_right,
+        pred_finger_right,
+        gt_finger_left,
+        pred_finger_left,
+        pred_finger_right_norm,
+        pred_finger_left_norm,
+    )
     print(f"[teacher_forcing] saved plot to {plot_path}")
+    print(f"[teacher_forcing] saved txt summary to {txt_path}")
 
 
 def _plot_gripper_comparison(
@@ -344,6 +369,52 @@ def _plot_gripper_comparison(
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
+
+
+def _write_teacher_forcing_txt(
+    out_path: str,
+    demo_id: str,
+    cfg: DatasetConfig,
+    gt_right: np.ndarray,
+    pred_right: np.ndarray,
+    gt_left: np.ndarray,
+    pred_left: np.ndarray,
+    pred_right_norm: np.ndarray,
+    pred_left_norm: np.ndarray,
+) -> None:
+    max_print = 5
+    with open(out_path, "w") as f:
+        f.write(f"Dexora teacher-forcing summary\n")
+        f.write(f"demo_id={demo_id}\n")
+        f.write(f"dataset_name={cfg['dataset_name']}\n")
+        f.write(f"embodiment_group={cfg['embodiment_group']}\n")
+        f.write(f"normalize_mode=min_max\n")
+        f.write(f"T={len(pred_right_norm)}\n\n")
+
+        for name, gt_arr, pred_arr, pred_norm_arr in [
+            ("right_gripper", gt_right, pred_right, pred_right_norm),
+            ("left_gripper", gt_left, pred_left, pred_left_norm),
+        ]:
+            f.write(f"== {name} (first {min(max_print, pred_norm_arr.shape[1])} dims in normalized space) ==\n")
+            f.write("t\t")
+            for j in range(min(max_print, pred_norm_arr.shape[1])):
+                f.write(f"{name}[{j}]_norm\t{name}[{j}]_denorm\t{name}[{j}]_gt\t")
+            f.write("\n")
+
+            for t_idx in range(len(pred_norm_arr)):
+                f.write(f"{t_idx}\t")
+                for j in range(min(max_print, pred_norm_arr.shape[1])):
+                    norm_v = float(pred_norm_arr[t_idx, j])
+                    denorm_v = float(pred_arr[t_idx, j])
+                    gt_v = float(gt_arr[t_idx, j])
+                    f.write(f"{norm_v:.6f}\t{denorm_v:.6f}\t{gt_v:.6f}\t")
+                f.write("\n")
+            f.write("\n")
+
+        f.write("== raw normalized extrema (first 5 dims only) ==\n")
+        for name, pred_norm_arr in [("right_gripper", pred_right_norm), ("left_gripper", pred_left_norm)]:
+            first = pred_norm_arr[:, : min(max_print, pred_norm_arr.shape[1])]
+            f.write(f"{name}: max_abs_norm={np.max(np.abs(first)):.6f}, min={np.min(first):.6f}, max={np.max(first):.6f}\n")
 
 
 def parse_args() -> argparse.Namespace:
