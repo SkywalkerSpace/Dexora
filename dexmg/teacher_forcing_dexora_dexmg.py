@@ -46,6 +46,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 
 DEXORA_ROOT = Path(__file__).resolve().parent.parent
 if str(DEXORA_ROOT) not in sys.path:
@@ -104,6 +105,111 @@ def denormalize(data: np.ndarray, stats_entry: dict, mode: str) -> np.ndarray:
     else:
         raise ValueError(f"未知 normalize_mode: {mode}")
     return out.astype(np.float32)
+
+
+def _get_action_head_fc2(policy: object) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """Return the final action-head fc2 weight and bias from the loaded policy."""
+    if hasattr(policy, "policy"):
+        policy_obj = policy.policy
+    else:
+        policy_obj = policy
+
+    model = getattr(policy_obj, "model", None)
+    if model is None:
+        raise RuntimeError("无法定位 policy.model；当前 checkpoint 结构不符合 Dexora RDTRunner 预期")
+
+    final_layer = getattr(model, "final_layer", None)
+    if final_layer is None:
+        raise RuntimeError("无法定位 policy.model.final_layer；当前 checkpoint 结构不符合 Dexora RDTRunner 预期")
+
+    ffn_final = getattr(final_layer, "ffn_final", None)
+    if ffn_final is None:
+        raise RuntimeError("无法定位 policy.model.final_layer.ffn_final；当前 checkpoint 结构不符合 Dexora RDTRunner 预期")
+
+    fc2 = getattr(ffn_final, "fc2", None)
+    if fc2 is None:
+        raise RuntimeError("无法定位 policy.model.final_layer.ffn_final.fc2；当前 checkpoint 结构不符合 Dexora RDTRunner 预期")
+
+    return fc2.weight.detach().float().cpu(), fc2.bias.detach().float().cpu() if fc2.bias is not None else None
+
+
+def _summarize_action_head_rows(weight: torch.Tensor, bias: Optional[torch.Tensor]) -> Dict[str, Dict[str, float]]:
+    """Compute L2/std stats for the major action rows used in the DexMG schema."""
+    weight_np = weight.detach().cpu().numpy()
+    bias_np = bias.detach().cpu().numpy() if bias is not None else np.zeros(weight_np.shape[0], dtype=np.float32)
+    groups = {
+        "right_arm_pos": (0, 3),
+        "right_gripper": (9, 15),
+        "left_arm_pos": (15, 18),
+        "left_gripper": (30, 36),
+    }
+    summary: Dict[str, Dict[str, float]] = {}
+    for name, (start, end) in groups.items():
+        if start >= weight_np.shape[0]:
+            continue
+        end = min(end, weight_np.shape[0])
+        rows = weight_np[start:end]
+        row_l2 = np.linalg.norm(rows, axis=1)
+        row_std = rows.std(axis=1)
+        row_bias_abs = np.abs(bias_np[start:end])
+        summary[name] = {
+            "start": int(start),
+            "end": int(end),
+            "l2_mean": float(row_l2.mean()),
+            "l2_median": float(np.median(row_l2)),
+            "l2_max": float(row_l2.max()),
+            "l2_min": float(row_l2.min()),
+            "std_mean": float(row_std.mean()),
+            "std_median": float(np.median(row_std)),
+            "std_max": float(row_std.max()),
+            "bias_abs_mean": float(row_bias_abs.mean()),
+            "bias_abs_median": float(np.median(row_bias_abs)),
+            "bias_abs_max": float(row_bias_abs.max()),
+            "bias_std": float(bias_np[start:end].std()),
+        }
+    return summary
+
+
+def _print_action_head_diagnostics(policy: object) -> None:
+    """Print a direct checkpoint-level sanity check for output rows tied to gripper DoFs."""
+    try:
+        weight, bias = _get_action_head_fc2(policy)
+    except Exception as e:
+        print(f"[head-check] could not inspect action head: {e}")
+        return
+
+    if weight.ndim != 2:
+        print(f"[head-check] unexpected fc2 weight shape={tuple(weight.shape)}; skip detailed diagnostic")
+        return
+
+    summary = _summarize_action_head_rows(weight, bias)
+    print("[head-check] action head row statistics (fc2):")
+    for name in ["right_arm_pos", "right_gripper", "left_arm_pos", "left_gripper"]:
+        if name not in summary:
+            continue
+        s = summary[name]
+        print(
+            f"  {name}[{s['start']}:{s['end']}] "
+            f"weight_l2_mean={s['l2_mean']:.6e} median={s['l2_median']:.6e} max={s['l2_max']:.6e} "
+            f"weight_std_mean={s['std_mean']:.6e} median={s['std_median']:.6e} "
+            f"bias_abs_mean={s['bias_abs_mean']:.6e} median={s['bias_abs_median']:.6e} bias_std={s['bias_std']:.6e}"
+        )
+
+    if "right_gripper" in summary and "right_arm_pos" in summary:
+        right_gripper_l2 = summary["right_gripper"]["l2_median"]
+        right_arm_l2 = summary["right_arm_pos"]["l2_median"]
+        ratio = right_gripper_l2 / max(right_arm_l2, 1e-12)
+        print(f"[head-check] right_gripper_vs_right_arm_pos median_L2_ratio={ratio:.3e}")
+        if ratio > 10.0:
+            print("[head-check] WARNING: right_gripper row norms are >10x larger than normal arm rows; this strongly suggests a row-wise divergence in the action head.")
+
+    if "left_gripper" in summary and "left_arm_pos" in summary:
+        left_gripper_l2 = summary["left_gripper"]["l2_median"]
+        left_arm_l2 = summary["left_arm_pos"]["l2_median"]
+        ratio = left_gripper_l2 / max(left_arm_l2, 1e-12)
+        print(f"[head-check] left_gripper_vs_left_arm_pos median_L2_ratio={ratio:.3e}")
+        if ratio > 10.0:
+            print("[head-check] WARNING: left_gripper row norms are >10x larger than normal arm rows; this strongly suggests a row-wise divergence in the action head.")
 
 
 def build_images_for_policy(obs: Dict[str, np.ndarray], cfg: DatasetConfig) -> Dict[str, np.ndarray]:
@@ -228,6 +334,7 @@ def run_teacher_forcing(args: argparse.Namespace) -> None:
         device=args.device,
     )
     policy = DexoraPolicy(model_path=args.model_path, cfg=policy_cfg)
+    _print_action_head_diagnostics(policy)
 
     demo_id = demo_ids[0]
     with h5py.File(args.hdf5, "r") as f:
@@ -388,7 +495,7 @@ def _write_teacher_forcing_txt(
         f.write(f"demo_id={demo_id}\n")
         f.write(f"dataset_name={cfg['dataset_name']}\n")
         f.write(f"embodiment_group={cfg['embodiment_group']}\n")
-        f.write(f"normalize_mode=min_max\n")
+        f.write(f"normalize_mode=rms\n")
         f.write(f"T={len(pred_right_norm)}\n\n")
 
         for name, gt_arr, pred_arr, pred_norm_arr in [
@@ -425,7 +532,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_path", type=str, default=None, help="Dexora checkpoint 目录或 .bin 文件")
     parser.add_argument("--model_config_path", type=str, default="configs/base_400m.yaml", help="训练时的 Dexora YAML 配置")
     parser.add_argument("--stats_file", type=str, default=None, help="compute_dexmg_stats.py 生成的 dataset_statistics.json")
-    parser.add_argument("--normalize_mode", type=str, default="min_max", choices=["min_max", "mean_std", "rms"])
+    parser.add_argument("--normalize_mode", type=str, default="rms", choices=["min_max", "mean_std", "rms"])
     parser.add_argument("--demo_idx", type=int, default=0, help="hdf5 内 demo 的索引；默认取第 0 个")
     parser.add_argument("--demo_name", type=str, default=None, help="显式指定 demo 名称；不传时用 demo_idx")
     parser.add_argument("--instruction", type=str, default="", help="若不填则用 dexmg_config.py 的默认 lang")
