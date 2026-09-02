@@ -474,6 +474,15 @@ def train(args, logger):
                 
                 state_elem_mask = state_elem_mask.unsqueeze(1)
                 action_elem_mask = action_elem_mask.unsqueeze(1)
+                if accelerator.is_local_main_process and action_elem_mask.shape[-1] >= 36 and (
+                    global_step < 5 or global_step % 100 == 0
+                ):
+                    debug_mask = action_elem_mask[0, 0]
+                    print(
+                        f"[mask-debug] step={global_step} "
+                        f"action_mask[9:15]={debug_mask[9:15].detach().cpu().tolist()} "
+                        f"action_mask[30:36]={debug_mask[30:36].detach().cpu().tolist()}"
+                    )
                 loss = rdt(
                     lang_tokens=text_embeds,
                     lang_attn_mask=lang_attn_mask,
@@ -487,6 +496,16 @@ def train(args, logger):
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
+                    final_fc2 = accelerator.unwrap_model(rdt).model.final_layer.ffn_final.fc2
+                    if final_fc2.weight.grad is not None and final_fc2.weight.grad.shape[0] >= 36:
+                        right_rows_grad_norm = final_fc2.weight.grad[9:15].norm().item()
+                        left_rows_grad_norm = final_fc2.weight.grad[30:36].norm().item()
+                        if global_step < 5 or global_step % 100 == 0:
+                            print(
+                                f"[grad-debug] step={global_step} "
+                                f"right_gripper_rows_grad.norm={right_rows_grad_norm:.6e} "
+                                f"left_gripper_rows_grad.norm={left_rows_grad_norm:.6e}"
+                            )
                     params_to_clip = rdt.parameters()
                     accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
                 optimizer.step()
