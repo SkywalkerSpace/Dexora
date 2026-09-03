@@ -32,7 +32,7 @@ model:
   lang_adaptor: mlp2x_gelu
   img_adaptor: mlp2x_gelu
   state_adaptor: mlp3x_gelu
-  lang_token_dim: 1024
+  lang_token_dim: 4096
   img_token_dim: 1152
   # Dim of action or proprioception vector
   state_token_dim: 42
