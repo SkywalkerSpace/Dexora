@@ -80,6 +80,8 @@ dependencies = [
 # CUDA / DeepSpeed users may want to pin separately. Stage-1/3 launch scripts
 # pass ``--deepspeed=./configs/zero2.json`` only when the extra is installed.
 deepspeed = ["deepspeed==0.14.2"]
+# bitsandbytes requires a compatible CUDA/PyTorch environment.
+quantization = ["bitsandbytes>=0.43.0"]
 
 # Anything required only for development / CI
 dev = [

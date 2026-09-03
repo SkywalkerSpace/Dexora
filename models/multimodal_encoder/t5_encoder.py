@@ -8,6 +8,7 @@ class T5Embedder:
         "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-base",
         "/home/ubuntu/myh/experiment/Dexora/google/t5-v1_1-large",
         "/home/mayuhang/models/t5-v1_1-large",
+        "/home/mayuhang/models/t5-v1_1-xxl",
         "google/t5-v1_1-small",
         "google/t5-v1_1-base",
         "google/t5-v1_1-large",
@@ -28,10 +29,18 @@ class T5Embedder:
         use_offload_folder=None,
         model_max_length=120,
         local_files_only=False,
+        quantization_mode=None,
     ):
         self.device = torch.device(device)
         self.torch_dtype = torch_dtype or torch.bfloat16
         self.cache_dir = cache_dir
+
+        if quantization_mode not in (None, "int8", "int4"):
+            raise ValueError("quantization_mode must be None, 'int8', or 'int4'")
+        if quantization_mode is not None and use_offload_folder is not None:
+            raise ValueError("quantization_mode cannot be combined with use_offload_folder")
+        if 'xxl' in from_pretrained:
+            quantization_mode = 'int4'
 
         if t5_model_kwargs is None:
             t5_model_kwargs = {
@@ -39,7 +48,27 @@ class T5Embedder:
                 "torch_dtype": self.torch_dtype,
             }
 
-            if use_offload_folder is not None:
+            if quantization_mode is not None:
+                try:
+                    from transformers import BitsAndBytesConfig
+                except ImportError as exc:
+                    raise ImportError(
+                        "Quantized T5 loading requires bitsandbytes. "
+                        "Install it with `pip install bitsandbytes`."
+                    ) from exc
+
+                if quantization_mode == "int8":
+                    quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+                else:
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=self.torch_dtype,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True,
+                    )
+                t5_model_kwargs["quantization_config"] = quantization_config
+                t5_model_kwargs["device_map"] = {"": self.device}
+            elif use_offload_folder is not None:
                 t5_model_kwargs["offload_folder"] = use_offload_folder
                 t5_model_kwargs["device_map"] = {
                     "shared": self.device,
