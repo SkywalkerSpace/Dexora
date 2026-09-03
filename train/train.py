@@ -172,40 +172,36 @@ def train(args, logger):
     vision_encoder = SiglipVisionTower(vision_tower=args.pretrained_vision_encoder_name_or_path, args=None)
     image_processor = vision_encoder.image_processor
 
-    # Load from a pretrained checkpoint
-    if (
-        args.pretrained_model_name_or_path is not None
-        and not os.path.isfile(args.pretrained_model_name_or_path)
-    ):
-        logger.info("Constructing model from pretrained checkpoint.")
-        rdt = RDTRunner.from_pretrained(args.pretrained_model_name_or_path)
-    else:
-        logger.info("Constructing model from provided config.")
-        # Calculate the image condition length
-        img_cond_len = (config["common"]["img_history_size"] 
-                        * config["common"]["num_cameras"] 
-                        * vision_encoder.num_patches)
-        rdt = RDTRunner(
-            action_dim=config["common"]["state_dim"],
-            pred_horizon=config["common"]["action_chunk_size"],
-            config=config["model"],
-            lang_token_dim=config["model"]["lang_token_dim"],
-            img_token_dim=config["model"]["img_token_dim"],
-            state_token_dim=config["model"]["state_token_dim"],
-            max_lang_cond_len=config["dataset"]["tokenizer_max_length"],
-            img_cond_len=img_cond_len,
-            img_pos_embed_config=[
-                # No initial pos embed in the last grid size
-                # since we've already done in ViT
-                ("image", (config["common"]["img_history_size"], 
-                    config["common"]["num_cameras"], 
-                    -vision_encoder.num_patches)),  
-            ],
-            lang_pos_embed_config=[
-                # Similarly, no initial pos embed for language
-                ("lang", -config["dataset"]["tokenizer_max_length"]),
-            ],
-            dtype=weight_dtype,
+    logger.info("Constructing model from provided config.")
+    img_cond_len = (config["common"]["img_history_size"]
+                    * config["common"]["num_cameras"]
+                    * vision_encoder.num_patches)
+    rdt = RDTRunner(
+        action_dim=config["common"]["state_dim"],
+        pred_horizon=config["common"]["action_chunk_size"],
+        config=config["model"],
+        lang_token_dim=config["model"]["lang_token_dim"],
+        img_token_dim=config["model"]["img_token_dim"],
+        state_token_dim=config["model"]["state_token_dim"],
+        max_lang_cond_len=config["dataset"]["tokenizer_max_length"],
+        img_cond_len=img_cond_len,
+        img_pos_embed_config=[
+            ("image", (config["common"]["img_history_size"],
+                       config["common"]["num_cameras"],
+                       -vision_encoder.num_patches)),
+        ],
+        lang_pos_embed_config=[
+            ("lang", -config["dataset"]["tokenizer_max_length"]),
+        ],
+        dtype=weight_dtype,
+    )
+    if args.pretrained_model_name_or_path is not None:
+        logger.info("Loading hidden-compatible policy weights; reinitializing action-space boundaries.")
+        checkpoint = RDTRunner.load_checkpoint_file(args.pretrained_model_name_or_path)
+        missing, unexpected, skipped = rdt.load_action_head_checkpoint(checkpoint)
+        logger.info(
+            "Loaded checkpoint: missing=%d unexpected=%d reinitialized=%d",
+            len(missing), len(unexpected), len(skipped),
         )
         
                                                                        
@@ -381,8 +377,8 @@ def train(args, logger):
     ):
         # Since EMA is deprecated, we do not load EMA from the pretrained checkpoint
         logger.info("Loading from a pretrained checkpoint.")
-        checkpoint = torch.load(args.pretrained_model_name_or_path)
-        rdt.module.load_state_dict(checkpoint["module"])
+        checkpoint = RDTRunner.load_checkpoint_file(args.pretrained_model_name_or_path)
+        rdt.module.load_action_head_checkpoint(checkpoint)
    
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:

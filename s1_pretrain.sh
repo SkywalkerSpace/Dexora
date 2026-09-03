@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Stage 1 — Pretrain the Dexora policy (Dexora paper §III-D Stage 1)
+# Stage 1 — Dataset fine-tuning of the Dexora policy
 #
-# Trains the 400M Diffusion-Transformer policy from scratch on the Dexora
-# real-world dataset. Replace the dataset path with a subset of
+# Fine-tunes a 36-D action-head checkpoint into the current 42-D policy on the
+# Dexora dataset. Set ``STAGE1_INIT_CKPT`` empty to train from scratch.
+# Replace the dataset path with a subset of
 # ``Dexora/Dexora_Real-World_Dataset`` from HuggingFace.
 #
 #     huggingface-cli download Dexora/Dexora_Real-World_Dataset \
@@ -26,10 +27,11 @@ set -Eeuo pipefail
 # Stats file for per-dim min-max normalization. If missing we auto-generate it
 # from the LeRobot root with ``data/lerobot_vla_dataset.py --stat``.
 : "${DEXORA_STATS:=new_lerobot_stats/dataset_statistics.json}"
+: "${STAGE1_INIT_CKPT:=}"
 
 # ---------- Training knobs ----------
 : "${CONFIG_PATH:=configs/base_400m.yaml}"
-: "${OUTPUT_DIR:=checkpoints/dexora-400m-pretrain}"
+: "${OUTPUT_DIR:=checkpoints/dexora-400m-stage1-finetune}"
 : "${NUM_GPUS:=2}"
 : "${TRAIN_BATCH_SIZE:=16}"
 : "${GRAD_ACCUM:=4}"
@@ -49,9 +51,10 @@ export WANDB_PROJECT
 export WANDB_MODE=${WANDB_MODE:-offline}
 
 mkdir -p "$OUTPUT_DIR"
-echo "==> Stage-1 pretrain"
+echo "==> Stage-1 dataset fine-tuning"
 echo "    DEXORA_LEROBOT_ROOT : $DEXORA_LEROBOT_ROOT"
 echo "    DEXORA_STATS        : $DEXORA_STATS"
+echo "    STAGE1_INIT_CKPT    : ${STAGE1_INIT_CKPT:-<from scratch>}"
 echo "    OUTPUT_DIR          : $OUTPUT_DIR"
 echo "    NUM_GPUS / bs       : $NUM_GPUS x $TRAIN_BATCH_SIZE  (grad-accum $GRAD_ACCUM)"
 echo "    MAX_TRAIN_STEPS     : $MAX_TRAIN_STEPS"
@@ -66,6 +69,13 @@ if [[ ! -f "$DEXORA_STATS" ]]; then
         --repo_dir   "$DEXORA_LEROBOT_ROOT"
 fi
 
+# The policy loader keeps hidden-size-compatible weights and reinitializes the
+# 36-D-dependent state input and action output projections for the 42-D model.
+INIT_ARGS=()
+if [[ -n "$STAGE1_INIT_CKPT" ]]; then
+    INIT_ARGS+=("--pretrained_model_name_or_path=$STAGE1_INIT_CKPT")
+fi
+
 # ----- Launch -----
 accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --mixed_precision="$MIXED_PRECISION" \
@@ -78,7 +88,8 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --lerobot_root="$DEXORA_LEROBOT_ROOT" \
     --stats_file="$DEXORA_STATS" \
     --state_dim_keep=42 \
-    --dataset_type=pretrain \
+    --dataset_type=finetune \
+    "${INIT_ARGS[@]}" \
     --train_batch_size="$TRAIN_BATCH_SIZE" \
     --sample_batch_size=2 \
     --gradient_accumulation_steps="$GRAD_ACCUM" \

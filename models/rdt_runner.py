@@ -1,4 +1,5 @@
 import re
+import os
 from pathlib import Path
 
 import torch
@@ -7,6 +8,7 @@ import torch.nn.functional as F
 from diffusers.schedulers.scheduling_ddpm import DDPMScheduler
 from diffusers.schedulers.scheduling_dpmsolver_multistep import \
     DPMSolverMultistepScheduler
+from safetensors.torch import load_file
 
 from models.hub_mixin import CompatiblePyTorchModelHubMixin
 from models.rdt.model import RDT
@@ -90,6 +92,47 @@ class RDTRunner(
             [p.numel() for p in self.lang_adaptor.parameters()] + 
             [p.numel() for p in self.img_adaptor.parameters()] + 
             [p.numel() for p in self.state_adaptor.parameters()]))
+
+    @staticmethod
+    def _action_space_boundary(key):
+        return key.startswith("state_adaptor.0.") or key.startswith(
+            "model.final_layer.ffn_final.fc2."
+        )
+
+    def load_action_head_checkpoint(self, state_dict):
+        """Load hidden-compatible weights while reinitializing M-dependent layers."""
+        if "module" in state_dict and isinstance(state_dict["module"], dict):
+            state_dict = state_dict["module"]
+
+        model_state = self.state_dict()
+        compatible = {}
+        skipped = []
+        unexpected = []
+        for key, value in state_dict.items():
+            if key not in model_state:
+                unexpected.append(key)
+            elif self._action_space_boundary(key) or value.shape != model_state[key].shape:
+                skipped.append(key)
+            else:
+                compatible[key] = value
+
+        missing, _ = self.load_state_dict(compatible, strict=False)
+        return missing, unexpected, skipped
+
+    @staticmethod
+    def load_checkpoint_file(checkpoint_path):
+        """Read a policy checkpoint from a file or a saved model directory."""
+        if os.path.isdir(checkpoint_path):
+            safetensor_path = os.path.join(checkpoint_path, "model.safetensors")
+            pytorch_path = os.path.join(checkpoint_path, "pytorch_model.bin")
+            if os.path.isfile(safetensor_path):
+                return load_file(safetensor_path, device="cpu")
+            checkpoint_path = pytorch_path
+
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+            return checkpoint["state_dict"]
+        return checkpoint
     
     def build_condition_adapter(
         self, projector_type, in_features, out_features):

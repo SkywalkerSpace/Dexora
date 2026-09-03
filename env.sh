@@ -86,6 +86,7 @@ CUDA_VISIBLE_DEVICES=2,3 \
 REPORT_TO=wandb \
 WANDB_MODE=online \
 DEXMG_VIDEO_RESOLUTION=256x256 \
+STAGE1_INIT_CKPT=/home/mayuhang/models/t5-v1_1-large \
     bash s1_pretrain.sh
 
 
