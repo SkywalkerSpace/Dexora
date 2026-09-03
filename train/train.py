@@ -370,15 +370,15 @@ def train(args, logger):
     first_epoch = 0
     
     # Load from a pretrained checkpoint
-    if (
-        args.resume_from_checkpoint is None 
-        and args.pretrained_model_name_or_path is not None
-        and os.path.isfile(args.pretrained_model_name_or_path)
-    ):
-        # Since EMA is deprecated, we do not load EMA from the pretrained checkpoint
-        logger.info("Loading from a pretrained checkpoint.")
-        checkpoint = RDTRunner.load_checkpoint_file(args.pretrained_model_name_or_path)
-        rdt.module.load_action_head_checkpoint(checkpoint)
+    # if (
+    #     args.resume_from_checkpoint is None 
+    #     and args.pretrained_model_name_or_path is not None
+    #     and os.path.isfile(args.pretrained_model_name_or_path)
+    # ):
+    #     # Since EMA is deprecated, we do not load EMA from the pretrained checkpoint
+    #     logger.info("Loading from a pretrained checkpoint.")
+    #     checkpoint = RDTRunner.load_checkpoint_file(args.pretrained_model_name_or_path)
+    #     rdt.module.load_action_head_checkpoint(checkpoint)
    
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:

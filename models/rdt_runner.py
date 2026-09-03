@@ -104,6 +104,14 @@ class RDTRunner(
         if "module" in state_dict and isinstance(state_dict["module"], dict):
             state_dict = state_dict["module"]
 
+        clean_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith("module."):
+                clean_state_dict[key[7:]] = value
+            else:
+                clean_state_dict[key] = value
+        state_dict = clean_state_dict
+
         model_state = self.state_dict()
         compatible = {}
         skipped = []
