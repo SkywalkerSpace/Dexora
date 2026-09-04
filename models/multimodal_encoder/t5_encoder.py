@@ -39,8 +39,10 @@ class T5Embedder:
             raise ValueError("quantization_mode must be None, 'int8', or 'int4'")
         if quantization_mode is not None and use_offload_folder is not None:
             raise ValueError("quantization_mode cannot be combined with use_offload_folder")
-        if 'xxl' in from_pretrained:
-            quantization_mode = 'int4'
+        if from_pretrained is None:
+            raise ValueError("from_pretrained must be a Hugging Face model id or local path")
+        # if 'xxl' in from_pretrained:
+        #     quantization_mode = 'int4'
 
         if t5_model_kwargs is None:
             t5_model_kwargs = {
@@ -109,7 +111,6 @@ class T5Embedder:
         self.use_text_preprocessing = use_text_preprocessing
         self.hf_token = hf_token
 
-        assert from_pretrained in self.available_models
         self.tokenizer = AutoTokenizer.from_pretrained(
             from_pretrained,
             model_max_length=model_max_length,
