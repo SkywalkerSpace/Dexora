@@ -123,6 +123,11 @@ class T5Embedder:
             local_files_only=local_files_only,
             **t5_model_kwargs,
         ).eval()
+        self.is_quantized = bool(
+            getattr(self.model, "is_loaded_in_4bit", False)
+            or getattr(self.model, "is_loaded_in_8bit", False)
+            or getattr(self.model.config, "quantization_config", None) is not None
+        )
         self.model_max_length = model_max_length
 
     def get_text_embeddings(self, texts):

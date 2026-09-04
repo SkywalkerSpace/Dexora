@@ -329,7 +329,7 @@ def train_posttrain(args, logger):
     ema_rdt.to(accelerator.device, dtype=weight_dtype)
     if scoring_model is not None:
         scoring_model.to(accelerator.device, dtype=weight_dtype)
-    if text_encoder is not None:
+    if text_encoder is not None and not getattr(text_embedder, "is_quantized", False):
         text_encoder.to(accelerator.device, dtype=weight_dtype)
     if vision_encoder is not None:
         vision_encoder.vision_tower.to(accelerator.device, dtype=weight_dtype)

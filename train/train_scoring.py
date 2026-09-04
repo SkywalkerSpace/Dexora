@@ -285,7 +285,11 @@ def train_scoring_model(args, logger):
         weight_dtype = torch.bfloat16
 
     # Ensure encoders are on the right device/dtype
-    if hasattr(text_encoder, "model") and text_encoder.model is not None:
+    if (
+        hasattr(text_encoder, "model")
+        and text_encoder.model is not None
+        and not getattr(text_encoder, "is_quantized", False)
+    ):
         text_encoder.model.to(accelerator.device, dtype=weight_dtype)
     if hasattr(vision_encoder, "vision_tower") and vision_encoder.vision_tower is not None:
         vision_encoder.vision_tower.to(accelerator.device, dtype=weight_dtype)
