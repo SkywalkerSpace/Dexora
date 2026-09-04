@@ -311,6 +311,7 @@ class RDTRunner(
 
         if return_dict:
             info["timesteps"] = timesteps.detach()
+            info["per_sample_loss"] = info["per_sample_mse"]
             return loss, info
         return loss
     

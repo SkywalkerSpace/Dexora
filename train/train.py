@@ -536,9 +536,7 @@ def train(args, logger):
                 )
 
                 gathered_timesteps = accelerator.gather(loss_info["timesteps"])
-                gathered_losses = accelerator.gather(
-                    loss.detach().float().expand_as(loss_info["timesteps"])
-                )
+                gathered_losses = accelerator.gather(loss_info["per_sample_loss"])
                 if accelerator.is_main_process:
                     batch_loss_t_pairs = list(zip(
                         gathered_timesteps.cpu().tolist(),

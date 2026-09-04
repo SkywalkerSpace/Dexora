@@ -139,6 +139,7 @@ def weighted_mse_loss(
 
     Returns:
         ``(loss, info)`` where ``info`` contains diagnostic tensors:
+                    * ``per_sample_mse`` (B,)
           * ``per_sample_mse_mean / min / max``
           * ``mean_weight``  (1.0 when ``sample_weights`` is None)
     """
@@ -185,6 +186,7 @@ def weighted_mse_loss(
         mean_weight = w.mean().detach()
 
     info: dict[str, torch.Tensor] = {
+        "per_sample_mse": per_sample_mse.detach(),
         "per_sample_mse_mean": per_sample_mse.mean().detach(),
         "per_sample_mse_min": per_sample_mse.min().detach(),
         "per_sample_mse_max": per_sample_mse.max().detach(),
