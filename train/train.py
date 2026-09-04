@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 
 import copy
+import json
 import logging
 import math
 import os
@@ -68,6 +69,39 @@ def _dump_batch_probe(state, action, images, out_dir: str, global_step: int) -> 
         fh.write(str(state.to(torch.float32).cpu().numpy()))
         fh.write("\naction: ")
         fh.write(str(action.to(torch.float32).cpu().numpy()))
+
+
+def _save_loss_vs_t_plot(raw_pairs, out_dir: str, num_train_timesteps: int, num_bins: int = 10) -> None:
+    """Save raw timestep/loss pairs and their equal-width bucket averages."""
+    os.makedirs(out_dir, exist_ok=True)
+    raw_path = os.path.join(out_dir, "loss_vs_t_raw.jsonl")
+    with open(raw_path, "w") as fh:
+        for timestep, loss_value in raw_pairs:
+            fh.write(json.dumps({"timestep": timestep, "loss": loss_value}) + "\n")
+
+    bucket_width = num_train_timesteps / num_bins
+    bucket_losses = [[] for _ in range(num_bins)]
+    for timestep, loss_value in raw_pairs:
+        bucket_index = min(int(timestep / bucket_width), num_bins - 1)
+        bucket_losses[bucket_index].append(loss_value)
+
+    bucket_means = [
+        sum(losses) / len(losses) if losses else float("nan")
+        for losses in bucket_losses
+    ]
+    labels = [
+        f"{int(index * bucket_width)}-{int((index + 1) * bucket_width)}"
+        for index in range(num_bins)
+    ]
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.bar(labels, bucket_means)
+    ax.set_xlabel("Diffusion timestep")
+    ax.set_ylabel("Mean training loss")
+    ax.set_title("Training loss vs diffusion timestep")
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "loss_vs_t.png"), dpi=150)
+    plt.close(fig)
 
 
 if is_wandb_available():
@@ -418,6 +452,11 @@ def train(args, logger):
     progress_bar.set_description("Steps")
 
     loss_for_log = {}
+    loss_t_pairs = []
+    loss_vs_t_dir = os.path.join(args.output_dir, "loss_vs_t")
+    if accelerator.is_main_process:
+        os.makedirs(loss_vs_t_dir, exist_ok=True)
+    raw_loss_t_path = os.path.join(loss_vs_t_dir, "loss_vs_t_raw.jsonl")
     for epoch in range(first_epoch, args.num_train_epochs):
 
         rdt.train()
@@ -480,7 +519,7 @@ def train(args, logger):
                         f"action_mask[9:15]={debug_mask[9:15].detach().cpu().tolist()} "
                         f"action_mask[30:36]={debug_mask[30:36].detach().cpu().tolist()}"
                     )
-                loss = rdt(
+                loss, loss_info = rdt(
                     lang_tokens=text_embeds,
                     lang_attn_mask=lang_attn_mask,
                     img_tokens=image_embeds,
@@ -488,8 +527,26 @@ def train(args, logger):
                     action_gt=actions,
                     state_mask=state_elem_mask,
                     action_mask=action_elem_mask,
-                    ctrl_freqs=ctrl_freqs
+                    ctrl_freqs=ctrl_freqs,
+                    return_dict=True,
                 )
+
+                gathered_timesteps = accelerator.gather(loss_info["timesteps"])
+                gathered_losses = accelerator.gather(
+                    loss.detach().float().expand_as(loss_info["timesteps"])
+                )
+                if accelerator.is_main_process:
+                    batch_loss_t_pairs = list(zip(
+                        gathered_timesteps.cpu().tolist(),
+                        gathered_losses.cpu().tolist(),
+                    ))
+                    loss_t_pairs.extend(batch_loss_t_pairs)
+                    with open(raw_loss_t_path, "a") as raw_loss_file:
+                        for timestep, loss_value in batch_loss_t_pairs:
+                            raw_loss_file.write(json.dumps({
+                                "timestep": timestep,
+                                "loss": loss_value,
+                            }) + "\n")
 
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -552,6 +609,11 @@ def train(args, logger):
     # Create the pipeline using using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
+        _save_loss_vs_t_plot(
+            loss_t_pairs,
+            out_dir=loss_vs_t_dir,
+            num_train_timesteps=config["model"]["noise_scheduler"]["num_train_timesteps"],
+        )
         accelerator.unwrap_model(rdt).save_pretrained(args.output_dir)
         ema_save_path = os.path.join(args.output_dir, f"ema")
         accelerator.save_model(ema_rdt, ema_save_path)

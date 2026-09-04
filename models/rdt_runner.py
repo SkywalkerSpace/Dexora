@@ -306,6 +306,7 @@ class RDTRunner(
         loss = loss.to(pred.dtype)
 
         if return_dict:
+            info["timesteps"] = timesteps.detach()
             return loss, info
         return loss
     
