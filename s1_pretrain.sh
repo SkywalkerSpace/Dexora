@@ -31,7 +31,7 @@ set -Eeuo pipefail
 
 # ---------- Training knobs ----------
 : "${CONFIG_PATH:=configs/base.yaml}"
-: "${OUTPUT_DIR:=checkpoints/dexora-400m-stage1-finetune}"
+: "${OUTPUT_DIR:=checkpoints/dexora-1b-finetune}"
 : "${NUM_GPUS:=2}"
 : "${TRAIN_BATCH_SIZE:=16}"
 : "${GRAD_ACCUM:=4}"
