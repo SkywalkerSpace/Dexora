@@ -88,7 +88,7 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --lerobot_root="$DEXORA_LEROBOT_ROOT" \
     --stats_file="$DEXORA_STATS" \
     --state_dim_keep=42 \
-    --dataset_type=finetune \
+    --dataset_type=pretrain \
     "${INIT_ARGS[@]}" \
     --train_batch_size="$TRAIN_BATCH_SIZE" \
     --sample_batch_size=2 \
