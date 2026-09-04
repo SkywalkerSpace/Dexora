@@ -61,7 +61,7 @@ class DexoraPolicyConfig:
     """
 
     model_config_path: str = "/home/mayuhang/Dexora/configs/base_400m.yaml"
-    text_encoder_path: str = "/home/mayuhang/models/t5-v1_1-large"
+    text_encoder_path: str = "/home/mayuhang/models/t5-v1_1-xxl"
     vision_encoder_path: str = "/home/mayuhang/models/siglip-so400m-patch14-384"
 
     state_dim: int = 42
