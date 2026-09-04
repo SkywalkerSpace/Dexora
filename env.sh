@@ -80,6 +80,7 @@ python compute_dexmg_stats.py \
 
 NUM_GPUS=2 \
 TRAIN_BATCH_SIZE=16 \
+GRAD_ACCUM=4 \
 MAX_TRAIN_STEPS=30000 \
 OUTPUT_DIR=checkpoints/dexora-400m-pretrain \
 CUDA_VISIBLE_DEVICES=2,3 \
