@@ -30,7 +30,7 @@ set -Eeuo pipefail
 : "${STAGE1_INIT_CKPT:=}"
 
 # ---------- Training knobs ----------
-: "${CONFIG_PATH:=configs/base_400m.yaml}"
+: "${CONFIG_PATH:=configs/base.yaml}"
 : "${OUTPUT_DIR:=checkpoints/dexora-400m-stage1-finetune}"
 : "${NUM_GPUS:=2}"
 : "${TRAIN_BATCH_SIZE:=16}"

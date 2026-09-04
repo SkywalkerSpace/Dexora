@@ -60,7 +60,7 @@ class DexoraPolicyConfig:
     Override anything you've tweaked at training time.
     """
 
-    model_config_path: str = "/home/mayuhang/Dexora/configs/base_400m.yaml"
+    model_config_path: str = "/home/mayuhang/Dexora/configs/base.yaml"
     text_encoder_path: str = "/home/mayuhang/models/t5-v1_1-xxl"
     vision_encoder_path: str = "/home/mayuhang/models/siglip-so400m-patch14-384"
 

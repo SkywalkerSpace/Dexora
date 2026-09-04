@@ -95,7 +95,7 @@ STAGE1_INIT_CKPT=/home/mayuhang/models/dexora-1b-pretrain-checkpoint-45000 \
 python sim_eval_dexora_dexmg.py \
     --dataset_root /home/mayuhang/datasets/dexmimicgen_datasets/ \
     --model_path /home/mayuhang/Dexora/checkpoints/dexora-400m-pretrain/ \
-    --model_config_path  /home/mayuhang/Dexora/configs/base_400m.yaml \
+    --model_config_path  /home/mayuhang/Dexora/configs/base.yaml \
     --stats_file /home/mayuhang/Dexora/dexmg/configs/dataset_statistics.json \
     --schema_cache_dir /home/mayuhang/Dexora/dexmg/configs \
     --n_rollouts 8 --horizon 400 \

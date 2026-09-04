@@ -101,8 +101,10 @@ class RDTRunner(
 
     def load_action_head_checkpoint(self, state_dict):
         """Load hidden-compatible weights while reinitializing M-dependent layers."""
-        if "module" in state_dict and isinstance(state_dict["module"], dict):
-            state_dict = state_dict["module"]
+        for wrapper_key in ("module", "model_state_dict", "state_dict"):
+            if wrapper_key in state_dict and isinstance(state_dict[wrapper_key], dict):
+                state_dict = state_dict[wrapper_key]
+                break
 
         clean_state_dict = {}
         for key, value in state_dict.items():
@@ -138,8 +140,10 @@ class RDTRunner(
             checkpoint_path = pytorch_path
 
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
-        if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-            return checkpoint["state_dict"]
+        if isinstance(checkpoint, dict):
+            for wrapper_key in ("module", "model_state_dict", "state_dict"):
+                if wrapper_key in checkpoint and isinstance(checkpoint[wrapper_key], dict):
+                    return checkpoint[wrapper_key]
         return checkpoint
     
     def build_condition_adapter(

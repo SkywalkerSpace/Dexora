@@ -235,8 +235,8 @@ def train(args, logger):
         logger.info("Loading hidden-compatible policy weights; reinitializing action-space boundaries.")
         checkpoint = RDTRunner.load_checkpoint_file(args.pretrained_model_name_or_path)
         missing, unexpected, skipped = rdt.load_action_head_checkpoint(checkpoint)
-        print("Loaded checkpoint: missing=%d unexpected=%d reinitialized=%d",
-            len(missing), len(unexpected), len(skipped),)
+        print("Loaded checkpoint: missing unexpected reinitialized",
+            len(missing), len(unexpected), len(skipped))
         logger.info(
             "Loaded checkpoint: missing=%d unexpected=%d reinitialized=%d",
             len(missing), len(unexpected), len(skipped),

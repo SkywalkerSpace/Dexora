@@ -8,7 +8,7 @@ common:
   # Dimension for state/action, we use the same space for both state and action
   # This MUST be equal to configs/state_vec.py
   # state_dim: 48 #egodex
-  state_dim: 36
+  state_dim: 42
 
 
 dataset:
@@ -47,7 +47,7 @@ model:
   # Dim of action or proprioception vector
   # A `state` refers to an action or a proprioception vector
   # state_token_dim: 48
-  state_token_dim: 36
+  state_token_dim: 42
   # Config for RDT structure
   rdt:
     # 1B: num_head 32 hidden_size 2048
@@ -59,7 +59,7 @@ model:
   noise_scheduler:
     type: ddpm
     num_train_timesteps: 1000
-    num_inference_timesteps: 5
+    num_inference_timesteps: 50
     beta_schedule: squaredcos_cap_v2  # Critical choice
     # Paper §III-C predicts the action noise \hat{eps}_theta. Older
     # checkpoints serialized with prediction_type=sample remain loadable
