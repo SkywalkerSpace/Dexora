@@ -129,6 +129,23 @@ class RDTRunner(
         missing, _ = self.load_state_dict(compatible, strict=False)
         return missing, unexpected, skipped
 
+    def get_layerwise_param_groups(self, learning_rate, hidden_lr_ratio=0.1):
+        """Return optimizer groups for a pretrained model with a new action space."""
+        action_head_params = []
+        hidden_params = []
+        for name, parameter in self.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            if self._action_space_boundary(name):
+                action_head_params.append(parameter)
+            else:
+                hidden_params.append(parameter)
+
+        return [
+            {"params": action_head_params, "lr": learning_rate},
+            {"params": hidden_params, "lr": learning_rate * hidden_lr_ratio},
+        ]
+
     @staticmethod
     def load_checkpoint_file(checkpoint_path):
         """Read a policy checkpoint from a file or a saved model directory."""

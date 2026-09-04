@@ -229,7 +229,8 @@ def train(args, logger):
         ],
         dtype=weight_dtype,
     )
-    if args.pretrained_model_name_or_path is not None:
+    loaded_pretrained_policy = args.pretrained_model_name_or_path is not None
+    if loaded_pretrained_policy:
         print('----- -----')
         print("Loading pretrained model:", args.pretrained_model_name_or_path)
         logger.info("Loading hidden-compatible policy weights; reinitializing action-space boundaries.")
@@ -292,7 +293,10 @@ def train(args, logger):
         optimizer_class = torch.optim.AdamW
 
     # Optimizer creation
-    params_to_optimize = rdt.parameters()
+    if loaded_pretrained_policy:
+        params_to_optimize = rdt.get_layerwise_param_groups(args.learning_rate)
+    else:
+        params_to_optimize = rdt.parameters()
     optimizer = optimizer_class(
         params_to_optimize,
         lr=args.learning_rate,
