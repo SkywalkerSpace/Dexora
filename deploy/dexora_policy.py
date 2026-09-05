@@ -113,7 +113,10 @@ class DexoraPolicy:
             device=self.device,
         )
         self.tokenizer = text_embedder.tokenizer
-        self.text_encoder = text_embedder.model.to(self.device, dtype=self.cfg.dtype).eval()
+        self.text_encoder = text_embedder.model
+        if not text_embedder.is_quantized:
+            self.text_encoder = self.text_encoder.to(self.device, dtype=self.cfg.dtype)
+        self.text_encoder.eval()
 
         logging.info(f"Loading SigLIP vision encoder from {self.cfg.vision_encoder_path} ...")
         self.vision_encoder = SiglipVisionTower(
