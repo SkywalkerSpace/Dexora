@@ -242,6 +242,11 @@ def train(args, logger):
             "Loaded checkpoint: missing=%d unexpected=%d reinitialized=%d",
             len(missing), len(unexpected), len(skipped),
         )
+
+        action_head_warmup_steps = 5000
+        rdt.set_action_head_only_trainable()
+    else:
+        action_head_warmup_steps = 0
         
                                                                        
     ema_rdt = copy.deepcopy(rdt)
@@ -294,7 +299,9 @@ def train(args, logger):
 
     # Optimizer creation
     if loaded_pretrained_policy:
-        params_to_optimize = rdt.get_layerwise_param_groups(args.learning_rate)
+        params_to_optimize = rdt.get_layerwise_param_groups(
+            args.learning_rate, include_frozen=True
+        )
     else:
         params_to_optimize = rdt.parameters()
     optimizer = optimizer_class(
@@ -455,6 +462,14 @@ def train(args, logger):
             first_epoch = global_step // num_update_steps_per_epoch
             resume_step = resume_global_step % (num_update_steps_per_epoch * args.gradient_accumulation_steps)
 
+    hidden_layers_unfrozen = not loaded_pretrained_policy or global_step >= action_head_warmup_steps
+    if loaded_pretrained_policy and hidden_layers_unfrozen:
+        accelerator.unwrap_model(rdt).set_all_parameters_trainable()
+    elif loaded_pretrained_policy:
+        accelerator.print(
+            f"Warming up action head for the first {action_head_warmup_steps} steps."
+        )
+
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
@@ -475,6 +490,17 @@ def train(args, logger):
         
         # Forward and backward...
         for batch in train_dataloader:
+            if (
+                loaded_pretrained_policy
+                and not hidden_layers_unfrozen
+                and global_step >= action_head_warmup_steps
+            ):
+                accelerator.unwrap_model(rdt).set_all_parameters_trainable()
+                hidden_layers_unfrozen = True
+                accelerator.print(
+                    f"Unfroze hidden layers at training step {global_step}."
+                )
+
             with accelerator.accumulate(rdt):
                 images = batch["images"].to(dtype=weight_dtype)
                 states = batch["states"].to(dtype=weight_dtype)  # (B, T, D_a)

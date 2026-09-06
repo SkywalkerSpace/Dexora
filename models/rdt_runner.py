@@ -99,6 +99,16 @@ class RDTRunner(
             "model.final_layer.ffn_final.fc2."
         )
 
+    def set_action_head_only_trainable(self):
+        """Freeze hidden layers while keeping the action-space boundaries trainable."""
+        for name, parameter in self.named_parameters():
+            parameter.requires_grad = self._action_space_boundary(name)
+
+    def set_all_parameters_trainable(self):
+        """Enable gradients for all model parameters after action-head warmup."""
+        for parameter in self.parameters():
+            parameter.requires_grad = True
+
     def load_action_head_checkpoint(self, state_dict):
         """Load hidden-compatible weights while reinitializing M-dependent layers."""
         for wrapper_key in ("module", "model_state_dict", "state_dict"):
@@ -129,12 +139,14 @@ class RDTRunner(
         missing, _ = self.load_state_dict(compatible, strict=False)
         return missing, unexpected, skipped
 
-    def get_layerwise_param_groups(self, learning_rate, hidden_lr_ratio=0.1):
+    def get_layerwise_param_groups(
+        self, learning_rate, hidden_lr_ratio=0.1, include_frozen=False
+    ):
         """Return optimizer groups for a pretrained model with a new action space."""
         action_head_params = []
         hidden_params = []
         for name, parameter in self.named_parameters():
-            if not parameter.requires_grad:
+            if not parameter.requires_grad and not include_frozen:
                 continue
             if self._action_space_boundary(name):
                 action_head_params.append(parameter)
