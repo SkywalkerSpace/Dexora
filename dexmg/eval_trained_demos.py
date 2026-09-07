@@ -294,6 +294,19 @@ def collect_records(dataset_root: str, seed: int, num_demos: int):
     return all_records[: min(num_demos, len(all_records))]
 
 
+def collect_single_record(dataset_root: str, hdf5_name: str, demo_index: int):
+    hdf5_path = hdf5_name if os.path.isabs(hdf5_name) else os.path.join(dataset_root, hdf5_name)
+    if not os.path.isfile(hdf5_path):
+        raise FileNotFoundError(f"找不到指定的 HDF5 文件: {hdf5_path}")
+    records = load_demo_records(hdf5_path)
+    if not 0 <= demo_index < len(records):
+        raise ValueError(
+            f"demo_index={demo_index} 超出 {os.path.basename(hdf5_path)!r} 的范围 "
+            f"[0, {len(records) - 1}]"
+        )
+    return [records[demo_index]]
+
+
 def evaluate_demo(record, policy, schema, stats, args, output_dir):
     cfg = get_dataset_config(record.hdf5_path)
     with h5py.File(record.hdf5_path, "r") as handle:
@@ -446,12 +459,35 @@ def main():
     parser.add_argument("--viz_camera", default="agentview")
     parser.add_argument("--instruction", default="")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--single_demo_index",
+        type=int,
+        default=os.environ.get("SINGLE_DEMO_INDEX"),
+        help="指定 HDF5 文件内的 zero-based demo 索引；需与 --single_demo_hdf5 一起使用。",
+    )
+    parser.add_argument(
+        "--single_demo_hdf5",
+        default=os.environ.get("SINGLE_DEMO_HDF5"),
+        help="指定包含 single_demo_index 的 HDF5 文件名或路径。",
+    )
     args = parser.parse_args()
+
+    if (args.single_demo_index is None) != (args.single_demo_hdf5 is None):
+        parser.error(
+            "--single_demo_index 和 --single_demo_hdf5 必须同时提供；都不提供时随机评测全部数据集。"
+        )
 
     schema = build_schema(args.dataset_root, args.schema_cache_dir or args.dataset_root)
     with open(args.stats_file, "r") as handle:
         stats = json.load(handle)
-    records = collect_records(args.dataset_root, args.seed, args.num_demos)
+    if args.single_demo_index is not None:
+        records = collect_single_record(
+            args.dataset_root,
+            args.single_demo_hdf5,
+            args.single_demo_index,
+        )
+    else:
+        records = collect_records(args.dataset_root, args.seed, args.num_demos)
     os.makedirs(args.output_dir, exist_ok=True)
     policy = DexoraPolicy(
         args.model_path,
