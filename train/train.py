@@ -43,6 +43,18 @@ from train.dataset import DataCollatorForVLAConsumerDataset, VLAConsumerDataset
 from train.sample import log_sample_res
 
 
+class RepeatedIndexSampler(torch.utils.data.Sampler):
+    def __init__(self, index: int, length: int):
+        self.index = index
+        self.length = length
+
+    def __iter__(self):
+        return iter([self.index] * self.length)
+
+    def __len__(self):
+        return self.length
+
+
 def _dump_batch_probe(state, action, images, out_dir: str, global_step: int) -> None:
     """Persist a quick visual + state/action probe for the first sample of a batch.
 
@@ -324,6 +336,7 @@ def train(args, logger):
         use_precomp_lang_embed=args.precomp_lang_embed,
         lerobot_root=getattr(args, "lerobot_root", None),
         bson_root=getattr(args, "bson_root", None),
+        hdf5_root=getattr(args, "hdf5_root", None),
         stats_file=getattr(args, "stats_file", None),
         state_dim_keep=getattr(args, "state_dim_keep", 36),
     )
@@ -341,13 +354,40 @@ def train(args, logger):
         state_noise_snr=None,
         **dataset_common_kwargs,
     )
+
+    train_sampler = None
+    if (args.single_demo_index is None) != (args.single_demo_hdf5 is None):
+        raise ValueError(
+            "--single_demo_index and --single_demo_hdf5 must be provided together; "
+            "omit both to train on all demos."
+        )
+    if args.single_demo_index is not None:
+        backend = train_dataset.hdf5_dataset
+        if not hasattr(backend, "get_global_index_for_hdf5"):
+            raise ValueError(
+                "--single_demo_hdf5 is currently supported only with the dexmg_hdf5 backend."
+            )
+        global_demo_index = backend.get_global_index_for_hdf5(
+            args.single_demo_hdf5,
+            args.single_demo_index,
+        )
+        train_sampler = RepeatedIndexSampler(global_demo_index, len(train_dataset))
+        logger.info(
+            "Training repeatedly on demo %d from HDF5 %s (global index %d).",
+            args.single_demo_index,
+            args.single_demo_hdf5,
+            global_demo_index,
+        )
+    else:
+        logger.info("Training on all demos with shuffled dataset sampling.")
     
     data_collator = DataCollatorForVLAConsumerDataset(tokenizer)                                                        
     
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.train_batch_size,
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         collate_fn=data_collator,
         num_workers=args.dataloader_num_workers,
         pin_memory=True,
@@ -475,6 +515,7 @@ def train(args, logger):
     progress_bar.set_description("Steps")
 
     loss_for_log = {}
+    loss_ema = None
     loss_t_pairs = []
     loss_vs_t_dir = os.path.join(args.output_dir, "loss_vs_t")
     if accelerator.is_main_process:
@@ -581,11 +622,17 @@ def train(args, logger):
                             }) + "\n")
 
                 accelerator.backward(loss)
-                if accelerator.sync_gradients:
-                    final_fc2 = accelerator.unwrap_model(rdt).model.final_layer.ffn_final.fc2
-                    if final_fc2.weight.grad is not None and final_fc2.weight.grad.shape[0] >= 36:
+                final_fc2 = accelerator.unwrap_model(rdt).model.final_layer.ffn_final.fc2
+                final_fc2_grad_norm = 0.0
+                right_rows_grad_norm = 0.0
+                left_rows_grad_norm = 0.0
+                if final_fc2.weight.grad is not None:
+                    final_fc2_grad_norm = final_fc2.weight.grad.norm().item()
+                    if final_fc2.weight.grad.shape[0] >= 36:
                         right_rows_grad_norm = final_fc2.weight.grad[9:15].norm().item()
                         left_rows_grad_norm = final_fc2.weight.grad[30:36].norm().item()
+                if accelerator.sync_gradients:
+                    if final_fc2.weight.grad is not None and final_fc2.weight.grad.shape[0] >= 36:
                         if global_step < 5 or global_step % 100 == 0:
                             print(
                                 f"[grad-debug] step={global_step} "
@@ -630,6 +677,14 @@ def train(args, logger):
                     accelerator.log(sample_loss_for_log, step=global_step)
 
             logs = {"loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            loss_value = loss.detach().item()
+            loss_ema = loss_value if loss_ema is None else args.alpha * loss_ema + (1 - args.alpha) * loss_value
+            logs.update({
+                "loss_ema": loss_ema,
+                "grad/final_fc2_norm": final_fc2_grad_norm,
+                "grad/final_fc2_right_gripper_norm": right_rows_grad_norm,
+                "grad/final_fc2_left_gripper_norm": left_rows_grad_norm,
+            })
             progress_bar.set_postfix(**logs)
             logs.update(loss_for_log)
             # logger.info(logs)

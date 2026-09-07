@@ -431,6 +431,7 @@ def main():
     parser.add_argument(
         "--no_ema", action="store_true",
         help="不使用 checkpoint/ema/model.safetensors，改为加载原始模型权重",
+        default=True
     )
     parser.add_argument("--model_config_path", default="configs/base_400m.yaml")
     parser.add_argument("--stats_file", required=True)

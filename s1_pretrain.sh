@@ -22,6 +22,7 @@ set -Eeuo pipefail
 # Either the per-task LeRobot v2.1 root (e.g. ``data/Dexora_Real-World_Dataset/airbot_pick_and_place``)
 # or one of the task families. See README "Dataset layout" for details.
 : "${DEXORA_LEROBOT_ROOT:=data/Dexora_Real-World_Dataset/airbot_pick_and_place}"
+: "${DEXORA_HDF5_ROOT:=/home/mayuhang/datasets/dexmimicgen_datasets}"
 : "${DEXORA_T5:=google/t5-v1_1-xxl}"
 : "${DEXORA_SIGLIP:=google/siglip-so400m-patch14-384}"
 # Stats file for per-dim min-max normalization. If missing we auto-generate it
@@ -44,6 +45,8 @@ set -Eeuo pipefail
 : "${DATALOADER_NUM_WORKERS:=4}"
 : "${REPORT_TO:=tensorboard}"
 : "${WANDB_PROJECT:=dexora}"
+: "${SINGLE_DEMO_INDEX:=}"
+: "${SINGLE_DEMO_HDF5:=}"
 
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
 export NCCL_IB_DISABLE=${NCCL_IB_DISABLE:-1}
@@ -53,6 +56,7 @@ export WANDB_MODE=${WANDB_MODE:-offline}
 mkdir -p "$OUTPUT_DIR"
 echo "==> Stage-1 dataset fine-tuning"
 echo "    DEXORA_LEROBOT_ROOT : $DEXORA_LEROBOT_ROOT"
+echo "    DEXORA_HDF5_ROOT    : $DEXORA_HDF5_ROOT"
 echo "    DEXORA_STATS        : $DEXORA_STATS"
 echo "    STAGE1_INIT_CKPT    : ${STAGE1_INIT_CKPT:-<from scratch>}"
 echo "    OUTPUT_DIR          : $OUTPUT_DIR"
@@ -75,6 +79,17 @@ INIT_ARGS=()
 if [[ -n "$STAGE1_INIT_CKPT" ]]; then
     INIT_ARGS+=("--pretrained_model_name_or_path=$STAGE1_INIT_CKPT")
 fi
+if [[ -n "$SINGLE_DEMO_INDEX" ]]; then
+    if [[ -z "$SINGLE_DEMO_HDF5" ]]; then
+        echo "SINGLE_DEMO_HDF5 must be set when SINGLE_DEMO_INDEX is set." >&2
+        exit 1
+    fi
+    INIT_ARGS+=("--single_demo_index=$SINGLE_DEMO_INDEX")
+    INIT_ARGS+=("--single_demo_hdf5=$SINGLE_DEMO_HDF5")
+elif [[ -n "$SINGLE_DEMO_HDF5" ]]; then
+    echo "SINGLE_DEMO_INDEX must be set when SINGLE_DEMO_HDF5 is set." >&2
+    exit 1
+fi
 
 # ----- Launch -----
 accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
@@ -85,6 +100,7 @@ accelerate launch --num_processes="$NUM_GPUS" --multi_gpu \
     --pretrained_vision_encoder_name_or_path="$DEXORA_SIGLIP" \
     --output_dir="$OUTPUT_DIR" \
     --load_from=dexmg_hdf5 \
+    --hdf5_root="$DEXORA_HDF5_ROOT" \
     --lerobot_root="$DEXORA_LEROBOT_ROOT" \
     --stats_file="$DEXORA_STATS" \
     --state_dim_keep=42 \

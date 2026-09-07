@@ -212,7 +212,9 @@ class DexoraPolicy:
                     "pass use_ema=False to load the regular checkpoint."
                 )
 
-        if os.path.isdir(model_path):
+        if os.path.isdir(model_path) and os.path.isfile(
+            os.path.join(weights_path, "config.json")
+        ):
             load_dir = weights_path
             try:
                 return RDTRunner.from_pretrained(load_dir)

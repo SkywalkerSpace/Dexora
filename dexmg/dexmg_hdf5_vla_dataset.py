@@ -263,6 +263,7 @@ class DexmgHDF5VLADataset:
         self.action_dim = self.schema.dim
 
         self._readers: List[_SingleDexmgReader] = []
+        self._reader_names: List[str] = []
         self._weights: List[float] = []
         for hdf5_name, cfg in DATASET_CONFIGS.items():
             hdf5_path = os.path.join(dataset_root, hdf5_name)
@@ -279,6 +280,7 @@ class DexmgHDF5VLADataset:
                 video_res=video_res,
             )
             self._readers.append(reader)
+            self._reader_names.append(hdf5_name)
             self._weights.append(dataset_weights.get(hdf5_name, 1.0))
 
         assert len(self._readers) > 0, f"{dataset_root} 下没有找到任何配置好的 dexmg hdf5 文件"
@@ -295,6 +297,22 @@ class DexmgHDF5VLADataset:
         reader_idx = int(np.searchsorted(self._bins, index, side="right") - 1)
         local_idx = index - self._bins[reader_idx]
         return reader_idx, local_idx
+
+    def get_global_index_for_hdf5(self, hdf5_name: str, demo_index: int) -> int:
+        hdf5_name = os.path.basename(hdf5_name)
+        if hdf5_name not in self._reader_names:
+            available = ", ".join(self._reader_names)
+            raise ValueError(
+                f"HDF5 file {hdf5_name!r} was not loaded from {self.dataset_root}. "
+                f"Available files: {available}"
+            )
+        reader_idx = self._reader_names.index(hdf5_name)
+        if not 0 <= demo_index < self._lens[reader_idx]:
+            raise ValueError(
+                f"demo_index={demo_index} is outside {hdf5_name!r} range "
+                f"[0, {self._lens[reader_idx] - 1}]"
+            )
+        return int(self._bins[reader_idx] + demo_index)
 
     def get_item(self, index: Optional[int] = None) -> dict:
         if index is None:

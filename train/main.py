@@ -70,6 +70,15 @@ def parse_args(input_args=None):
         help="Path to a BSON dataset root (legacy). Used when ``--load_from=bson``.",
     )
     parser.add_argument(
+        "--hdf5_root",
+        type=str,
+        default=None,
+        help=(
+            "Path to an HDF5 dataset directory. Used when ``--load_from=hdf5`` "
+            "or ``--load_from=dexmg_hdf5``."
+        ),
+    )
+    parser.add_argument(
         "--stats_file",
         type=str,
         default=None,
@@ -95,6 +104,24 @@ def parse_args(input_args=None):
     )
     parser.add_argument(
         "--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader."
+    )
+    parser.add_argument(
+        "--single_demo_index",
+        type=int,
+        default=None,
+        help=(
+            "If set together with --single_demo_hdf5, repeatedly train on this "
+            "zero-based demo index inside that HDF5 file."
+        ),
+    )
+    parser.add_argument(
+        "--single_demo_hdf5",
+        type=str,
+        default=None,
+        help=(
+            "HDF5 filename containing --single_demo_index. Must be provided "
+            "together with --single_demo_index."
+        ),
     )
     parser.add_argument(
         "--sample_batch_size", type=int, default=8, help="Batch size (per device) for the sampling dataloader."

@@ -100,6 +100,7 @@ class VLAConsumerDataset(Dataset):
         use_precomp_lang_embed=False,
         lerobot_root=None,
         bson_root=None,
+        hdf5_root=None,
         stats_file=None,
         state_dim_keep=36,
     ):
@@ -170,15 +171,14 @@ class VLAConsumerDataset(Dataset):
             self.hdf5_dataset = BsonVLADataset(**ds_kwargs)
         elif use_hdf5 == "hdf5":
             from data.hdf5_vla_dataset import HDF5VLADataset
-            self.hdf5_dataset = HDF5VLADataset()
+            self.hdf5_dataset = HDF5VLADataset(dataset_root=hdf5_root)
         elif use_hdf5 == "egodex":
             from data.egodex_vla_dataset import EgoDexVLADataset  # noqa: F401
             self.hdf5_dataset = EgoDexVLADataset()
         elif use_hdf5 == "dexmg_hdf5":
             from dexmg.dexmg_hdf5_vla_dataset import DexmgHDF5VLADataset
             self.hdf5_dataset = DexmgHDF5VLADataset(
-                # dataset_root="/mnt/2t/myh/experiment/checkpoints",
-                dataset_root="/home/mayuhang/datasets/dexmimicgen_datasets",
+                dataset_root=hdf5_root or "/home/mayuhang/datasets/dexmimicgen_datasets",
                 stats_file="dexmg/configs/dataset_statistics.json",
                 filter_keys={},
                 schema_cache_dir="configs/",
@@ -316,7 +316,7 @@ class VLAConsumerDataset(Dataset):
                     if getattr(self, 'dataset', None) is not None:
                         res = self.dataset[index]
                     else:
-                        res = self.hdf5_dataset.get_item()
+                        res = self.hdf5_dataset.get_item(index=index)
                     content = res['meta']
                     states = res['state']
                     actions = res['actions']
