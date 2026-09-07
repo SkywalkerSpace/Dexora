@@ -418,6 +418,10 @@ def main():
     parser.add_argument("--dataset_root", required=True)
     parser.add_argument("--schema_cache_dir", default=None)
     parser.add_argument("--model_path", required=True)
+    parser.add_argument(
+        "--no_ema", action="store_true",
+        help="不使用 checkpoint/ema/model.safetensors，改为加载原始模型权重",
+    )
     parser.add_argument("--model_config_path", default="configs/base_400m.yaml")
     parser.add_argument("--stats_file", required=True)
     parser.add_argument("--normalize_mode", choices=["min_max", "mean_std", "rms"], default="rms")
@@ -444,6 +448,7 @@ def main():
             model_config_path=args.model_config_path,
             state_dim=schema.dim,
             chunk_size=args.chunk_size,
+            use_ema=not args.no_ema,
         ),
     )
     for record in records:

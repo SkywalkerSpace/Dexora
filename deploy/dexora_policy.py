@@ -68,6 +68,7 @@ class DexoraPolicyConfig:
     chunk_size: int = 32
     img_history_size: int = 1
     cameras: Sequence[str] = DEXORA_CAMERA_ORDER
+    use_ema: bool = False
 
     # Inference dtype. bf16 matches training; fall back to fp32 if needed.
     dtype: torch.dtype = torch.bfloat16
@@ -127,7 +128,9 @@ class DexoraPolicy:
 
         # ---- Load policy ---------------------------------------------------
         logging.info(f"Loading Dexora policy from {model_path} ...")
-        self.policy = self._load_policy(model_path).to(self.device, dtype=self.cfg.dtype).eval()
+        self.policy = self._load_policy(
+            model_path, use_ema=self.cfg.use_ema
+        ).to(self.device, dtype=self.cfg.dtype).eval()
         n_params = sum(p.numel() for p in self.policy.parameters())
         logging.info(f"[DexoraPolicy] policy params = {n_params/1e6:.1f}M")
 
@@ -195,13 +198,24 @@ class DexoraPolicy:
     # -----------------------------------------------------------------------
     # Internals
     # -----------------------------------------------------------------------
-    def _load_policy(self, model_path: str) -> RDTRunner:
+    def _load_policy(self, model_path: str, use_ema: bool = False) -> RDTRunner:
         """Try ``RDTRunner.from_pretrained`` first (HF format), then fall back
-        to a raw ``state_dict`` / ``pytorch_model.bin``.
+        to a raw ``state_dict`` / ``pytorch_model.bin``. When ``use_ema`` is
+        enabled, load the EMA model saved under ``<checkpoint>/ema``.
         """
+        weights_path = model_path
+        if use_ema:
+            weights_path = os.path.join(model_path, "ema")
+            if not os.path.isdir(weights_path):
+                raise FileNotFoundError(
+                    f"EMA weights not found under {weights_path}; "
+                    "pass use_ema=False to load the regular checkpoint."
+                )
+
         if os.path.isdir(model_path):
+            load_dir = weights_path
             try:
-                return RDTRunner.from_pretrained(model_path)
+                return RDTRunner.from_pretrained(load_dir)
             except Exception as e:
                 logging.warning(
                     f"[DexoraPolicy] from_pretrained failed ({e}); "
@@ -236,18 +250,20 @@ class DexoraPolicy:
         )
 
         # Resolve raw state-dict path
-        if os.path.isfile(model_path):
-            sd_path = model_path
+        if os.path.isfile(weights_path):
+            sd_path = weights_path
         else:
-            sd_path = os.path.join(model_path, "pytorch_model.bin")
-            if not os.path.exists(sd_path):
+            candidates = [
+                os.path.join(weights_path, "model.safetensors"),
+                os.path.join(weights_path, "pytorch_model.bin"),
+            ]
+            sd_path = next((path for path in candidates if os.path.exists(path)), None)
+            if sd_path is None:
                 raise FileNotFoundError(
-                    f"No ``pytorch_model.bin`` under {model_path}; please pass "
+                    f"No model weights under {weights_path}; please pass "
                     "a HF-style checkpoint directory or a state_dict file."
                 )
-        sd = torch.load(sd_path, map_location="cpu")
-        if isinstance(sd, dict):
-            sd = sd.get("module", sd.get("model_state_dict", sd.get("state_dict", sd)))
+        sd = RDTRunner.load_checkpoint_file(sd_path)
         missing, unexpected = policy.load_state_dict(sd, strict=False)
         if missing or unexpected:
             logging.warning(
