@@ -98,6 +98,7 @@ from tqdm import tqdm
 import cv2
 import h5py
 import imageio
+import matplotlib.pyplot as plt
 import numpy as np
 import robosuite
 from robosuite import load_composite_controller_config
@@ -299,6 +300,53 @@ def denormalize(data: np.ndarray, stats_entry: dict, mode: str) -> np.ndarray:
     return out.astype(np.float32)
 
 
+def save_action_curve(action_trace: list, action_mask: np.ndarray, schema: Schema,
+                      output_path: str, title: str) -> None:
+    """保存一个 episode 的统一 action 曲线，并显式标出 mask 屏蔽维度。"""
+    if not action_trace:
+        return
+
+    actions = np.asarray(action_trace, dtype=np.float32)
+    mask = np.asarray(action_mask, dtype=np.float32)
+    groups = [
+        ("right arm", ["right_arm_pos", "right_arm_rot6d"]),
+        ("right gripper", ["right_gripper"]),
+        ("left arm", ["left_arm_pos", "left_arm_rot6d"]),
+        ("left gripper", ["left_gripper"]),
+    ]
+    colors = plt.cm.tab10(np.linspace(0, 1, max(schema.dim, 1)))
+    fig, axes = plt.subplots(4, 1, figsize=(14, 11), sharex=True)
+    time_axis = np.arange(actions.shape[0])
+
+    for ax, (group_name, slot_names) in zip(axes, groups):
+        dim_index = []
+        for slot_name in slot_names:
+            slot = schema.slots[slot_name]
+            dim_index.extend(range(slot.offset, slot.offset + slot.dim))
+
+        for local_index, dim in enumerate(dim_index):
+            valid = mask[dim] > 0.5
+            ax.plot(
+                time_axis, actions[:, dim],
+                color=colors[dim % len(colors)],
+                linewidth=1.1 if valid else 0.9,
+                linestyle="-" if valid else "--",
+                alpha=0.9 if valid else 0.55,
+                label=f"d{local_index} (schema {dim})" + (" [masked]" if not valid else ""),
+            )
+        valid_count = int(mask[dim_index].sum())
+        ax.set_title(f"{group_name}: {valid_count}/{len(dim_index)} valid dimensions")
+        ax.set_ylabel("value")
+        ax.grid(True, alpha=0.25)
+        ax.legend(loc="upper right", fontsize=7, ncol=2)
+
+    axes[-1].set_xlabel("timestep")
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, format="jpg", bbox_inches="tight")
+    plt.close(fig)
+
+
 # =============================================================================
 # gripper 真实宽度推断：见文件头部的修复说明。
 # =============================================================================
@@ -442,6 +490,8 @@ def rollout_episode(
     # 里不会变）。
     gripper_widths = infer_gripper_widths(env.action_dim, cfg["embodiment_group"], schema)
     action_queue = ChunkActionQueue()
+    unified_action_queue = ChunkActionQueue()
+    action_trace = []
     success = False
     t = 0
     pbar = tqdm(range(horizon), desc=ds_name, leave=False)
@@ -469,8 +519,11 @@ def rollout_episode(
                 axis=0,
             )
             action_queue.push_chunk(env_action_chunk)
+            unified_action_queue.push_chunk(action_chunk)
 
         action = action_queue.pop()
+        unified_action = unified_action_queue.pop()
+        action_trace.append(unified_action)
         obs, reward, done, info = env.step(action)
         pbar.set_postfix(success=success)
 
@@ -483,6 +536,7 @@ def rollout_episode(
 
         if (t + 1) % replan_interval == 0:
             action_queue.clear()
+            unified_action_queue.clear()
 
         if hasattr(env, "_check_success") and env._check_success():
             success = True
@@ -491,7 +545,7 @@ def rollout_episode(
             break
 
     pbar.close()
-    return success, t + 1
+    return success, t + 1, action_trace
 
 
 # =============================================================================
@@ -617,24 +671,35 @@ def main():
         for ep in range(args.n_rollouts):
             writer = None
             video_path = None
+            action_curve_path = None
             if not args.render:
                 video_path = os.path.join(dataset_video_dir, f"{env_name}_ep{ep}.mp4")
                 writer = imageio.get_writer(video_path, fps=20)
+                action_curve_path = os.path.join(
+                    dataset_video_dir, f"{env_name}_ep{ep}_actions.jpg"
+                )
 
             t0 = time.time()
-            success, n_steps = rollout_episode(
+            success, n_steps, action_trace = rollout_episode(
                 env, policy, cfg, schema, args.instruction, args.horizon,
                 stats, args.normalize_mode, args.replan_interval,
                 viz_camera=args.viz_camera, video_writer=writer, live_render=args.render,
             )
             if writer is not None:
                 writer.close()
+            if action_curve_path is not None:
+                save_action_curve(
+                    action_trace, action_mask, schema, action_curve_path,
+                    title=f"{cfg['dataset_name']} / {env_name} / episode {ep}",
+                )
             dt = time.time() - t0
             n_success += int(success)
 
             msg = f"[{cfg['dataset_name']} ep {ep}] success={success} steps={n_steps} time={dt:.1f}s"
             if video_path is not None:
                 msg += f" video={video_path}"
+            if action_curve_path is not None:
+                msg += f" actions={action_curve_path}"
             print(msg)
 
         print(f"=== {cfg['dataset_name']} success rate: {n_success}/{args.n_rollouts} ===")
