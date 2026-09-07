@@ -35,6 +35,7 @@ import imageio
 import matplotlib.pyplot as plt
 import numpy as np
 import robosuite
+import torch
 from robosuite import load_composite_controller_config
 
 import dexmimicgen  # noqa: F401  注册 dexmimicgen 环境
@@ -173,6 +174,108 @@ def save_action_comparison(predicted, target, action_mask, schema, output_path, 
     plt.close(fig)
 
 
+@torch.no_grad()
+def compute_training_diffusion_loss(
+    policy,
+    policy_obs,
+    target_actions,
+    state_mask,
+    action_mask,
+):
+    """按 RDTRunner.compute_loss 的训练公式计算单个 demo 的 loss。
+
+    返回总 loss 和每个 action 维度的 MSE。loss 是随机 diffusion timestep
+    下的噪声预测误差，不是 predict_action 输出与标签的直接误差。
+    """
+    lang_tokens, lang_mask = policy._encode_language(policy_obs["instruction"])
+    img_tokens = policy._encode_images(policy_obs["images"])
+    state = torch.from_numpy(np.asarray(policy_obs["state"], dtype=np.float32))
+    state = state[None, None, :].to(policy.device, dtype=policy.cfg.dtype)
+    state_mask_tensor = torch.from_numpy(state_mask).to(
+        policy.device, dtype=policy.cfg.dtype
+    )[None, None, :]
+    action_mask_tensor = torch.from_numpy(action_mask).to(
+        policy.device, dtype=policy.cfg.dtype
+    )[None, None, :]
+    action_gt = torch.from_numpy(np.asarray(target_actions, dtype=np.float32)).to(
+        policy.device, dtype=policy.cfg.dtype
+    )[None, :, :]
+
+    action_valid = action_mask_tensor.expand(-1, action_gt.shape[1], -1)
+    noise = torch.randn_like(action_gt) * action_valid
+    timesteps = torch.randint(
+        0, policy.policy.num_train_timesteps, (1,), device=policy.device
+    ).long()
+    noisy_action = policy.policy.noise_scheduler.add_noise(
+        action_gt * action_valid, noise, timesteps
+    ) * action_valid
+
+    state_token = torch.cat([state, state_mask_tensor], dim=2)
+    action_token = torch.cat([noisy_action, action_valid], dim=2)
+    state_action_traj = torch.cat([state_token, action_token], dim=1)
+    lang_cond, img_cond, state_action_traj = policy.policy.adapt_conditions(
+        lang_tokens, img_tokens, state_action_traj
+    )
+    pred = policy.policy.model(
+        state_action_traj,
+        torch.tensor([policy_obs.get("ctrl_freq", 20.0)], device=policy.device,
+                     dtype=policy.cfg.dtype),
+        timesteps,
+        lang_cond,
+        img_cond,
+        lang_mask=lang_mask,
+    )
+
+    if policy.policy.prediction_type == "epsilon":
+        target = noise
+    elif policy.policy.prediction_type == "sample":
+        target = action_gt
+    else:
+        raise ValueError(f"Unsupported prediction type {policy.policy.prediction_type}")
+
+    squared_error = (pred.float() - target.float()).square()[0]
+    valid = action_mask.astype(bool)
+    per_dim = squared_error.mean(dim=0).cpu().numpy()
+    total = squared_error[:, valid].mean().item() if np.any(valid) else 0.0
+    return float(total), per_dim
+
+
+def save_loss_curve(total_losses, per_dim_losses, action_mask, schema, output_path, title):
+    total_losses = np.asarray(total_losses, dtype=np.float32)
+    per_dim_losses = np.asarray(per_dim_losses, dtype=np.float32)
+    groups = [
+        ("right arm", ["right_arm_pos", "right_arm_rot6d"]),
+        ("right gripper", ["right_gripper"]),
+        ("left arm", ["left_arm_pos", "left_arm_rot6d"]),
+        ("left gripper", ["left_gripper"]),
+    ]
+    fig, axes = plt.subplots(5, 1, figsize=(15, 15), sharex=True)
+    time_axis = np.arange(len(total_losses))
+    axes[0].plot(time_axis, total_losses, color="black", linewidth=1.3)
+    axes[0].set_title("total diffusion training loss")
+    axes[0].set_ylabel("MSE")
+    axes[0].grid(True, alpha=0.25)
+
+    for axis, (name, slot_names) in zip(axes[1:], groups):
+        dims = []
+        for slot_name in slot_names:
+            slot = schema.slots[slot_name]
+            dims.extend(range(slot.offset, slot.offset + slot.dim))
+        valid_dims = [dim for dim in dims if action_mask[dim] > 0.5]
+        for local_index, dim in enumerate(valid_dims):
+            axis.plot(time_axis, per_dim_losses[:, dim], linewidth=1.0,
+                      label=f"d{local_index}")
+        axis.set_title(f"{name} ({len(valid_dims)} valid dimensions)")
+        axis.set_ylabel("MSE")
+        axis.grid(True, alpha=0.25)
+        axis.legend(loc="upper right", fontsize=7, ncol=4)
+    axes[-1].set_xlabel("demo timestep")
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, format="jpg", bbox_inches="tight")
+    plt.close(fig)
+
+
 def collect_records(dataset_root: str, seed: int, num_demos: int):
     rng = np.random.default_rng(seed)
     paths = sorted(glob.glob(os.path.join(dataset_root, "*.hdf5")))
@@ -212,8 +315,11 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
 
     video_path = os.path.join(output_dir, f"{record.demo_id}_policy.mp4")
     image_path = os.path.join(output_dir, f"{record.demo_id}_action_compare.jpg")
+    loss_image_path = os.path.join(output_dir, f"{record.demo_id}_loss_curve.jpg")
     writer = imageio.get_writer(video_path, fps=20)
     predicted_actions = []
+    total_losses = []
+    per_dim_losses = []
     action_queue = []
     unified_action_queue = []
     gripper_widths = None
@@ -226,14 +332,36 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
         if args.horizon > 0:
             steps = min(steps, args.horizon)
         for step in range(steps):
+            state_raw, _ = build_state_from_obs(obs, cfg, schema)
+            policy_obs = {
+                "state": normalize(state_raw, stats[cfg["dataset_name"]]["state"], args.normalize_mode),
+                "images": build_images_for_policy(obs, cfg),
+                "instruction": args.instruction or cfg["lang"],
+                "ctrl_freq": 20.0,
+            }
+            loss_chunk_end = min(step + policy.cfg.chunk_size, len(dataset_actions))
+            loss_chunk = dataset_actions[step:loss_chunk_end]
+            if len(loss_chunk) < policy.cfg.chunk_size:
+                loss_chunk = np.pad(
+                    loss_chunk,
+                    ((0, policy.cfg.chunk_size - len(loss_chunk)), (0, 0)),
+                    mode="edge",
+                )
+            normalized_loss_chunk = normalize(
+                loss_chunk,
+                stats[cfg["dataset_name"]]["action"],
+                args.normalize_mode,
+            )
+            total_loss, per_dim_loss = compute_training_diffusion_loss(
+                policy,
+                policy_obs,
+                normalized_loss_chunk,
+                schema.state_group_mask(cfg["embodiment_group"]),
+                action_mask,
+            )
+            total_losses.append(total_loss)
+            per_dim_losses.append(per_dim_loss)
             if not action_queue or step % args.replan_interval == 0:
-                state_raw, _ = build_state_from_obs(obs, cfg, schema)
-                policy_obs = {
-                    "state": normalize(state_raw, stats[cfg["dataset_name"]]["state"], args.normalize_mode),
-                    "images": build_images_for_policy(obs, cfg),
-                    "instruction": args.instruction or cfg["lang"],
-                    "ctrl_freq": 20.0,
-                }
                 chunk = policy.get_action(policy_obs)
                 chunk = denormalize_actions(
                     chunk, stats[cfg["dataset_name"]]["action"], args.normalize_mode
@@ -258,7 +386,18 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
         predicted_actions, dataset_actions, action_mask, schema, image_path,
         f"{cfg['dataset_name']} / {record.demo_id} / prediction vs dataset",
     )
-    print(f"[{record.demo_id}] video={video_path} actions={image_path}")
+    save_loss_curve(
+        total_losses,
+        per_dim_losses,
+        action_mask,
+        schema,
+        loss_image_path,
+        f"{cfg['dataset_name']} / {record.demo_id} / diffusion loss",
+    )
+    print(
+        f"[{record.demo_id}] video={video_path} actions={image_path} "
+        f"loss={loss_image_path}"
+    )
 
 
 def denormalize_actions(data, stats_entry, mode):
