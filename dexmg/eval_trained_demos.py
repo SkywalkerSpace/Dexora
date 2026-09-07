@@ -37,6 +37,7 @@ import numpy as np
 import robosuite
 import torch
 from robosuite import load_composite_controller_config
+from tqdm import tqdm
 
 import dexmimicgen  # noqa: F401  注册 dexmimicgen 环境
 
@@ -323,6 +324,7 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
     action_queue = []
     unified_action_queue = []
     gripper_widths = None
+    pbar = None
     try:
         obs = reset_to_demo(env, record)
         gripper_widths = infer_gripper_widths(
@@ -331,7 +333,12 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
         steps = min(record.length, len(dataset_actions))
         if args.horizon > 0:
             steps = min(steps, args.horizon)
-        for step in range(steps):
+        pbar = tqdm(
+            range(steps),
+            desc=f"{cfg['dataset_name']}/{record.demo_id}",
+            leave=False,
+        )
+        for step in pbar:
             state_raw, _ = build_state_from_obs(obs, cfg, schema)
             policy_obs = {
                 "state": normalize(state_raw, stats[cfg["dataset_name"]]["state"], args.normalize_mode),
@@ -361,6 +368,7 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
             )
             total_losses.append(total_loss)
             per_dim_losses.append(per_dim_loss)
+            pbar.set_postfix(loss=f"{total_loss:.4f}")
             if not action_queue or step % args.replan_interval == 0:
                 chunk = policy.get_action(policy_obs)
                 chunk = denormalize_actions(
@@ -379,6 +387,8 @@ def evaluate_demo(record, policy, schema, stats, args, output_dir):
             if done:
                 break
     finally:
+        if pbar is not None:
+            pbar.close()
         writer.close()
         env.close()
 
@@ -451,7 +461,7 @@ def main():
             use_ema=not args.no_ema,
         ),
     )
-    for record in records:
+    for record in tqdm(records, desc="Evaluating demos"):
         evaluate_demo(record, policy, schema, stats, args, args.output_dir)
 
 

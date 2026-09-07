@@ -168,6 +168,9 @@ class RDTRunner(
                 return load_file(safetensor_path, device="cpu")
             checkpoint_path = pytorch_path
 
+        if str(checkpoint_path).endswith(".safetensors"):
+            return load_file(checkpoint_path, device="cpu")
+
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         if isinstance(checkpoint, dict):
             for wrapper_key in ("module", "model_state_dict", "state_dict"):
