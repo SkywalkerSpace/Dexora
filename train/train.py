@@ -255,7 +255,7 @@ def train(args, logger):
             len(missing), len(unexpected), len(skipped),
         )
 
-        action_head_warmup_steps = 5000
+        action_head_warmup_steps = 7500
         rdt.set_action_head_only_trainable()
     else:
         action_head_warmup_steps = 0

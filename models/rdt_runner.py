@@ -140,7 +140,7 @@ class RDTRunner(
         return missing, unexpected, skipped
 
     def get_layerwise_param_groups(
-        self, learning_rate, hidden_lr_ratio=0.1, include_frozen=False
+        self, learning_rate, hidden_lr_ratio=0.01, include_frozen=False
     ):
         """Return optimizer groups for a pretrained model with a new action space."""
         action_head_params = []
